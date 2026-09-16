@@ -2,6 +2,29 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Environment (NGT cluster)
+
+Runs inside a CERN NGT Kubernetes pod, not a normal machine.
+- `source /shared/projects/ngt4jets/env.sh` first. Sets `LOG_DIR`,
+  `MPLCONFIGDIR`, uv cache paths.
+- Repo at `/shared/projects/ngt4jets/repo`. `/shared` persists across
+  pods; `/scratch` and the container FS are wiped on pod deletion.
+- GPU is a 12 GB H100 MIG slice, not a full card (different hardware could be requested when launching the pod if necessary later).
+- **No HTCondor and no Slurm here.** Everything in `condor/` and
+  `scripts/condor_run_training.sh` is lxplus-only and cannot run.
+  Do not propose changes to it or suggest submitting jobs.
+- `Tokenizer/` and `test_data/` are gitignored and absent from the clone.
+
+## Rules
+- Always `uv run`. **Never `uv lock` or `uv add`** without asking —
+  `uv.lock` is the reproducibility contract for the results being matched.
+- Work on branch `philip`. Never commit to `dev-split` (frozen reference
+  of the students' original code). `origin` = my fork, `upstream` = phi-5454.
+- Don't launch training runs without asking. Shared cluster, one slice.
+- When explaining where a config value comes from, cite file and line.
+- Prefer telling me commands to run over running them yourself. I paste
+  back the output. Exception: read-only inspection (ls, cat, grep).
+
 ## Project overview
 
 **ORBIT Tokenizer** (package `enhancing-ntp4jets`, importable as `gabbro`): VQ-VAE tokenization of absolute-coordinate particle/jet sequences stored in parquet files, for CMS L1 Trigger firmware-compression research. The focus is on classification-fidelity vs. firmware-storage-cost tradeoffs (ggHbb/QCD/tt processes).
@@ -21,7 +44,7 @@ Environment is managed with `uv` (Python 3.12).
   uv run --locked python gabbro/train.py experiment=orbit_parquet_smoke model=model_vqvae_transformer_split
   ```
   Any config value can be overridden on the command line (standard Hydra overrides).
-- End-to-end smoke test: `scripts/smoke_test_orbit_parquet.sh` — runs the `orbit_parquet_smoke` and `orbit_jet_parquet_smoke` experiments against a small local parquet fixture (`PARQUET_FILE` env var, defaults to `../test_data/...`).
+- End-to-end smoke test: `scripts/smoke_test_orbit_parquet.sh` — runs the `orbit_parquet_smoke` and `orbit_jet_parquet_smoke` experiments against a small local parquet fixture (`PARQUET_FILE` env var, defaults to `../test_data/...`). The fixture does not exist in a fresh clone — generate it first with `scripts/generate_test_parquet.py`.
 - Tests (pytest, config in `pyproject.toml`):
   - `uv run pytest` — full suite
   - `uv run pytest tests/test_orbit_binary.py` — single file
@@ -41,14 +64,13 @@ Environment is managed with `uv` (Python 3.12).
   - Supports `continue_from_checkpoint`, `load_weights_from` (with an optional feature-expansion warm-start path for checkpoints with differing feature-dict sizes), and a standalone `ckpt_path_for_evaluation` mode that reloads the original training config and can substitute `evaluation_data_config`/`evaluation_test_suites` for cross-domain testing.
 - **Data pipeline**: `gabbro.data.orbit_parquet.OrbitParquetDataModule` reads parquet files/directories/manifests (`.txt/.list/.lst`), with deterministic file-level train/val split (`data.split_seed`, `data.train_fraction`). Model input contract: `part_features [batch, seq, 4]` (scaled eta, cos φ, sin φ, transformed pT), `part_mask [batch, seq]`, `jet_type_labels [batch]`.
 - **Model architecture**: `gabbro/models/vqvae.py` (Lightning module), `gabbro/models/transformer.py` (backbone), `gabbro/models/quantizers.py` (single VQ, and split quantizer: encoder latent → Φ → per-branch quantizers, each FSQ or VQ → Ψ → decoder latent). `configs/model/` has ~90 yaml files; most are systematic FSQ/VQ codebook-size and morphology sweep variants (`model_vqvae_transformer_split_fsq_mu_*_fsq_alpha_*`, etc.) generated for Condor scan grids. Add new sweep points by following this naming convention rather than reorganizing the directory.
-- **"Canonical" pattern**: `orbit_canonical_tt`, `orbit_canonical_qcd_tt_vjets_vv` data configs and the matching `condor/*_canonical*.sub` files are the standardized, blessed physics-process mixtures used for cross-model comparison. The project follows an explicitly *additive* design philosophy throughout (canonical configs, downstream benchmarks, multirun collector `--family` flags) — extend these families rather than modifying or replacing them, to preserve reproducibility of prior scans.
+- **"Canonical" pattern**: `orbit_canonical_tt`, `orbit_canonical_qcd_tt_vjets_vv` data configs and the matching `condor/*_canonical*.sub` files are the standardized, blessed physics-process mixtures used for cross-model comparison.
 - **Callbacks/plotting**: `gabbro/callbacks/orbit_plotting_callback.py` + `gabbro/plotting/orbit.py` produce reconstruction/residual/codebook-usage plots and FastJet-backed physics diagnostics (pT resolution, MET, jet mass, tau32) during training. Run outputs land under `${LOG_DIR}/<project>/runs/<timestamp>_<id>/{checkpoints,plots,saved_histograms,saved_metrics,wandb,csv}/`.
 - **Downstream physics-fidelity benchmarks**: paired original/decoded event classifiers, plus mass-fidelity scripts (`scripts/evaluate_orbit_higgs_mass.py`, `scripts/evaluate_orbit_z_mumu_mass.py`) — these evaluate tokenization fidelity against physics observables, not just reconstruction loss.
 - **Binary export & firmware storage**: `scripts/export_orbit_event_binaries.py` produces firmware-aligned bit-packed event representations; `scripts/benchmark_orbit_storage.py` compares storage cost against EDM/NanoAOD CMSSW output, via a companion C++ plugin at `cmssw/OrbitCompression/StorageBenchmark/` — built inside an external CMSSW checkout, not part of this repo's own Python build/test flow.
 - **HTCondor jobs**: `condor/` has ~90 `.sub`/`.dag` files, launched via `scripts/condor_run_training.sh` using `conda run` (not `uv`). Site-specific vars (`PROJECT_DIR`, `OUTPUT_DIR`, `CONDA_ENV`, `ORBIT_MANIFEST_DIR`, `GABBRO_ENV_FILE`) are edited at the top of each `.sub` file.
 - **`vqtorch/`**: vendored third-party VQ library, installed as a local `uv` path dependency (`[tool.uv.sources]` in `pyproject.toml`) — treat as third-party code, not project code.
 - **`.project-root`**: marker file required by `pyrootutils.setup_root()` for resolving `PROJECT_ROOT` and `configs/paths/default.yaml` regardless of invocation directory — do not delete it.
-- **`docker/`**: alternate conda/pip container environment; its `wandb` pin is notably older than the one in `pyproject.toml` — known drift, not something to silently reconcile by upgrading/downgrading one to match the other.
 
 ## Conventions
 
