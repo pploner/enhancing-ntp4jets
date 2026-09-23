@@ -25,7 +25,7 @@ from scripts.evaluate_orbit_higgs_mass import (
 
 
 def _write_candidates(path, original, decoded):
-    path.parent.mkdir(parents=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as stream:
         writer = csv.DictWriter(
             stream, fieldnames=("resolved_original", "resolved_decoded")

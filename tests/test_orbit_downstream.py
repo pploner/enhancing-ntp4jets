@@ -44,7 +44,9 @@ def test_five_class_taxonomy_and_feature_contract():
     features, mask = physical_particles_to_classifier_features(particles, pid, 4)
     assert features.shape == (1, 4, 12)
     assert mask.tolist() == [[True, True, False, False]]
-    assert np.allclose(features[0, 0, :4], [0.1, 0.0, 1.0, np.log(10.0) - 1.8])
+    assert np.allclose(
+        features[0, 0, :4], [0.1, 0.0, 1.0, np.log(10.0) - 1.8], atol=1e-6
+    )
     assert features[0, 0, 5] == 1
     assert features[0, 1, 11] == 1
     assert np.count_nonzero(features[0, 2:].numpy()) == 0

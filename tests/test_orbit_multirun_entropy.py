@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from omegaconf import OmegaConf
 
 pytest.importorskip("mplhep")
 
@@ -126,12 +127,14 @@ def test_compression_ratio_marker_area_increases_with_codebook_size():
 
 def test_faiss_kmeans_multirun_metadata():
     metadata = _quantizer_metadata(
-        {
-            "model": {
-                "_target_": "gabbro.models.vqvae.FaissKMeansBaselineLightning",
-                "num_codes": 8192,
+        OmegaConf.create(
+            {
+                "model": {
+                    "_target_": "gabbro.models.vqvae.FaissKMeansBaselineLightning",
+                    "num_codes": 8192,
+                }
             }
-        }
+        )
     )
 
     assert metadata["quantizer_mode"] == "kmeans"
