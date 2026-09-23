@@ -76,12 +76,16 @@ def main() -> None:
 
     processes = [process for group in FIVE_CLASS_GROUPS.values() for process in group]
     for process in processes:
-        train_val, test = split_paths(
-            read_paths(args.manifest_dir / f"{process}.txt"),
-            process,
-            args.seed,
-            args.test_fraction,
-        )
+        try:
+            paths = read_paths(args.manifest_dir / f"{process}.txt")
+        except FileNotFoundError:
+            print(f"{process}: SKIPPED, no raw manifest found (empty or missing EOS directory)")
+            continue
+        try:
+            train_val, test = split_paths(paths, process, args.seed, args.test_fraction)
+        except ValueError as exc:
+            print(f"{process}: SKIPPED, {exc}")
+            continue
         write_manifest(args.manifest_dir / f"{process}_train_val.txt", train_val, args.force)
         write_manifest(args.manifest_dir / f"{process}_test.txt", test, args.force)
         print(f"{process}: {len(train_val)} train_val files, {len(test)} test files")
