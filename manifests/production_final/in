@@ -1,0 +1,8 @@
+./.job.ad
+./.machine.ad
+./.chirp.config
+./yelberke.cc
+./.xrdcp_plugin.py.in
+./.xrdcp_plugin.py.out
+./condor_run_higgs_presentation_worker.sh
+./.update.ad

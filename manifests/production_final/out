@@ -1,0 +1,16 @@
+./.job.ad
+./.machine.ad
+./.chirp.config
+./yelberke.cc
+./.xrdcp_plugin.py.in
+./.xrdcp_plugin.py.out
+./condor_run_higgs_presentation_worker.sh
+./.update.ad
+./tmp/
+./tmp/torchinductor_yelberke/
+./var/
+./var/tmp/
+./srv/
+./_condor_stdout
+./_condor_stderr
+./.condor_pid_ns_status

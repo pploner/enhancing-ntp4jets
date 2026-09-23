@@ -1,0 +1,28 @@
+# @package _global_
+
+defaults:
+  - orbit_campaign_full500_sm_vq4096
+  - override /model: model_faiss_kmeans_baseline.yaml
+  - _self_
+
+project_name: orbit-campaign-full500-sm-faiss4096
+task_name: orbit_campaign_full500_sm_faiss4096
+tags: [orbit, campaign, full-statistics, SM, particle-full, faiss, codes-4096]
+train: false
+test: true
+test_without_checkpoint: true
+evaluation_test_suites: [ttbar]
+
+model:
+  num_codes: 4096
+  # FAISS consumes a five-class-balanced particle reservoir, not gradient
+  # epochs: 2M particles each from QCD, tt, VJets, VV, and standalone DY.
+  fit_max_particles: 10000000
+  fit_max_batches: 10000
+  max_test_plot_batches: 625
+
+trainer:
+  accumulate_grad_batches: 1
+  # The fitting invocation needs only one batch after the 10M-particle
+  # reservoir has been collected and the centroids have been saved.
+  limit_test_batches: 1

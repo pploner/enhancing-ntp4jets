@@ -1,0 +1,89 @@
+defaults:
+  - orbit_canonical
+  - _self_
+
+# Full-statistics reference campaign.  The reference exposure is the complete
+# canonical tt sample (80,268,065 events): 51,338,575 train, 12,856,486
+# validation, and 16,073,004 test events after the established file split.
+train_event_budget: 51338575
+val_event_budget: 12856486
+
+# The default selection is the unfiltered, leading-500 PUPPI collection.
+sequence_type: particle_full
+max_sequence_length: 500
+batch_size: 16
+
+process_catalog:
+  QCD_HT50tobb: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/QCD_HT50tobb_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/QCD_HT50tobb_test.txt"}
+  QCD_HT50toInf: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/QCD_HT50toInf_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/QCD_HT50toInf_test.txt"}
+  tt_hadronic: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/tt0123j_5f_ckm_LO_MLM_hadronic_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/tt0123j_5f_ckm_LO_MLM_hadronic_test.txt"}
+  tt_leptonic: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/tt0123j_5f_ckm_LO_MLM_leptonic_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/tt0123j_5f_ckm_LO_MLM_leptonic_test.txt"}
+  tt_semileptonic: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/tt0123j_5f_ckm_LO_MLM_semiLeptonic_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/tt0123j_5f_ckm_LO_MLM_semiLeptonic_test.txt"}
+  WJetsToLNu: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/WJetsToLNu_13TeV-madgraphMLM-pythia8_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/WJetsToLNu_13TeV-madgraphMLM-pythia8_test.txt"}
+  WJetsToQQ: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/WJetsToQQ_13TeV-madgraphMLM-pythia8_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/WJetsToQQ_13TeV-madgraphMLM-pythia8_test.txt"}
+  DYJetsToLL: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/DYJetsToLL_13TeV-madgraphMLM-pythia8_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/DYJetsToLL_13TeV-madgraphMLM-pythia8_test.txt"}
+  ZJetsTobb: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/ZJetsTobb_13TeV-madgraphMLM-pythia8_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/ZJetsTobb_13TeV-madgraphMLM-pythia8_test.txt"}
+  ZJetsTocc: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/ZJetsTocc_13TeV-madgraphMLM-pythia8_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/ZJetsTocc_13TeV-madgraphMLM-pythia8_test.txt"}
+  ZJetsToQQ: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/ZJetsToQQ_13TeV-madgraphMLM-pythia8_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/ZJetsToQQ_13TeV-madgraphMLM-pythia8_test.txt"}
+  ZJetsTovv: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/ZJetsTovv_13TeV-madgraphMLM-pythia8_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/ZJetsTovv_13TeV-madgraphMLM-pythia8_test.txt"}
+  WW_hadronic: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/WW_hadronic_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/WW_hadronic_test.txt"}
+  WW_leptonic: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/WW_leptonic_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/WW_leptonic_test.txt"}
+  WW_semileptonic: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/WW_semileptonic_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/WW_semileptonic_test.txt"}
+  WZ_hadronic: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/WZ_hadronic_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/WZ_hadronic_test.txt"}
+  WZ_leptonic: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/WZ_leptonic_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/WZ_leptonic_test.txt"}
+  WZ_semileptonic: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/WZ_semileptonic_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/WZ_semileptonic_test.txt"}
+  ZZ_hadronic: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/ZZ_hadronic_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/ZZ_hadronic_test.txt"}
+  ZZ_leptonic: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/ZZ_leptonic_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/ZZ_leptonic_test.txt"}
+  ZZ_semileptonic: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/ZZ_semileptonic_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/ZZ_semileptonic_test.txt"}
+  ggHbb: {test: "${oc.env:ORBIT_MANIFEST_DIR}/ggHbb_test.txt"}
+  minbias: {test: "${oc.env:ORBIT_MANIFEST_DIR}/minbias.txt"}
+
+# Training-domain variants fill this mapping in separate data-group configs.
+train_val_processes: null
+
+test_suites:
+  ttbar:
+    event_budget: 16073004
+    # Consume the complete natural test split instead of downsampling its
+    # already-near-equal tt decay modes.
+    event_quotas:
+      tt_hadronic: 5357635
+      tt_leptonic: 5358067
+      tt_semileptonic: 5357302
+    processes:
+      tt_hadronic: {paths: "${data.process_catalog.tt_hadronic.test}", group: tt}
+      tt_leptonic: {paths: "${data.process_catalog.tt_leptonic.test}", group: tt}
+      tt_semileptonic: {paths: "${data.process_catalog.tt_semileptonic.test}", group: tt}
+  sm_mixture:
+    event_budget: 16073004
+    processes:
+      QCD_HT50tobb: {paths: "${data.process_catalog.QCD_HT50tobb.test}", group: QCD}
+      QCD_HT50toInf: {paths: "${data.process_catalog.QCD_HT50toInf.test}", group: QCD}
+      tt_hadronic: {paths: "${data.process_catalog.tt_hadronic.test}", group: tt}
+      tt_leptonic: {paths: "${data.process_catalog.tt_leptonic.test}", group: tt}
+      tt_semileptonic: {paths: "${data.process_catalog.tt_semileptonic.test}", group: tt}
+      WJetsToLNu: {paths: "${data.process_catalog.WJetsToLNu.test}", group: VJets}
+      WJetsToQQ: {paths: "${data.process_catalog.WJetsToQQ.test}", group: VJets}
+      DYJetsToLL: {paths: "${data.process_catalog.DYJetsToLL.test}", group: DY}
+      ZJetsTobb: {paths: "${data.process_catalog.ZJetsTobb.test}", group: VJets}
+      ZJetsTocc: {paths: "${data.process_catalog.ZJetsTocc.test}", group: VJets}
+      ZJetsToQQ: {paths: "${data.process_catalog.ZJetsToQQ.test}", group: VJets}
+      ZJetsTovv: {paths: "${data.process_catalog.ZJetsTovv.test}", group: VJets}
+      WW_hadronic: {paths: "${data.process_catalog.WW_hadronic.test}", group: VV}
+      WW_leptonic: {paths: "${data.process_catalog.WW_leptonic.test}", group: VV}
+      WW_semileptonic: {paths: "${data.process_catalog.WW_semileptonic.test}", group: VV}
+      WZ_hadronic: {paths: "${data.process_catalog.WZ_hadronic.test}", group: VV}
+      WZ_leptonic: {paths: "${data.process_catalog.WZ_leptonic.test}", group: VV}
+      WZ_semileptonic: {paths: "${data.process_catalog.WZ_semileptonic.test}", group: VV}
+      ZZ_hadronic: {paths: "${data.process_catalog.ZZ_hadronic.test}", group: VV}
+      ZZ_leptonic: {paths: "${data.process_catalog.ZZ_leptonic.test}", group: VV}
+      ZZ_semileptonic: {paths: "${data.process_catalog.ZZ_semileptonic.test}", group: VV}
+  gghbb:
+    # The complete ggHbb test manifest is smaller than the tt reference split.
+    event_budget: 2098560
+    processes:
+      ggHbb: {paths: "${data.process_catalog.ggHbb.test}", group: ggHbb}
+  minbias:
+    event_budget: 16073004
+    processes:
+      minbias: {paths: "${data.process_catalog.minbias.test}", group: minbias}

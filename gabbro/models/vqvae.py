@@ -660,6 +660,7 @@ class FaissKMeansBaselineLightning(DumbQuantizationBaselineLightning):
         nredo: int = 1,
         seed: int = 12345,
         use_gpu: bool = True,
+        codebook_path: str | Path | None = None,
         save_codebook: bool = True,
         upload_codebook_to_wandb: bool = True,
         max_validation_plot_batches: int | None = 0,
@@ -697,13 +698,76 @@ class FaissKMeansBaselineLightning(DumbQuantizationBaselineLightning):
         self.nredo = int(nredo)
         self.seed = int(seed)
         self.use_gpu = bool(use_gpu)
+        self.codebook_path = Path(codebook_path).expanduser() if codebook_path else None
         self.save_codebook = bool(save_codebook)
         self.upload_codebook_to_wandb = bool(upload_codebook_to_wandb)
         self.q_levels = None
         self.model = _BaselineModel(self.num_codes)
         self.centroids: np.ndarray | None = None
         self._faiss_index = None
+        self._faiss_gpu_resources = None
         self._fit_metadata: dict[str, Any] = {}
+
+    def _load_codebook(self, faiss, gpu_count: int) -> None:
+        if self.codebook_path is None:
+            raise RuntimeError("No FAISS codebook path was configured")
+        if not self.codebook_path.is_file():
+            raise FileNotFoundError(f"FAISS codebook does not exist: {self.codebook_path}")
+
+        with np.load(self.codebook_path) as payload:
+            if "centroids" not in payload:
+                raise ValueError(
+                    f"FAISS codebook {self.codebook_path} has no 'centroids' array"
+                )
+            centroids = np.asarray(payload["centroids"], dtype=np.float32)
+        if centroids.ndim != 2 or centroids.shape[0] != self.num_codes:
+            raise ValueError(
+                "FAISS codebook centroid shape must be "
+                f"({self.num_codes}, feature_dim), got {centroids.shape}"
+            )
+        if centroids.shape[1] < 3 or not np.all(np.isfinite(centroids)):
+            raise ValueError("FAISS codebook centroids must be finite and two-dimensional")
+
+        cpu_index = faiss.IndexFlatL2(int(centroids.shape[1]))
+        cpu_index.add(np.ascontiguousarray(centroids))
+        if self.use_gpu:
+            self._faiss_gpu_resources = faiss.StandardGpuResources()
+            index = faiss.index_cpu_to_gpu(self._faiss_gpu_resources, 0, cpu_index)
+        else:
+            index = cpu_index
+
+        metadata_path = self.codebook_path.with_name("faiss_kmeans_metadata.json")
+        metadata = {}
+        if metadata_path.is_file():
+            metadata = json.loads(metadata_path.read_text())
+            metadata_num_codes = metadata.get("num_codes")
+            if metadata_num_codes is not None and int(metadata_num_codes) != self.num_codes:
+                raise ValueError(
+                    f"FAISS metadata reports {metadata_num_codes} codes, expected "
+                    f"{self.num_codes}"
+                )
+
+        phi_radius = np.sqrt(centroids[:, 1] ** 2 + centroids[:, 2] ** 2)
+        metadata.update(
+            {
+                "num_codes": self.num_codes,
+                "feature_dim": int(centroids.shape[1]),
+                "use_gpu": self.use_gpu,
+                "faiss_gpu_count": gpu_count,
+                "fit_seconds": 0.0,
+                "final_objective": metadata.get("final_objective"),
+                "fit_particles_total": int(metadata.get("fit_particles_total", 0)),
+                "fit_particles_per_class": metadata.get("fit_particles_per_class", {}),
+                "phi_radius_mean": float(np.mean(phi_radius)),
+                "phi_radius_min": float(np.min(phi_radius)),
+                "phi_radius_max": float(np.max(phi_radius)),
+                "loaded_codebook_path": str(self.codebook_path.resolve()),
+            }
+        )
+        self.centroids = np.ascontiguousarray(centroids)
+        self._faiss_index = index
+        self._fit_metadata = metadata
+        logger.info("Loaded FAISS centroid dictionary from %s", self.codebook_path)
 
     @staticmethod
     def _class_fit_quotas(datamodule, total_particles: int) -> dict[int, tuple[str, int]]:
@@ -833,6 +897,10 @@ class FaissKMeansBaselineLightning(DumbQuantizationBaselineLightning):
         if self.use_gpu and gpu_count < 1:
             raise RuntimeError("use_gpu=true but FAISS did not detect any CUDA GPUs")
 
+        if self.codebook_path is not None:
+            self._load_codebook(faiss, gpu_count)
+            return
+
         sample, class_counts = self._collect_fit_particles()
         max_points_per_centroid = max(1, math.ceil(len(sample) / self.num_codes))
         logger.info(
@@ -953,6 +1021,11 @@ class FaissKMeansBaselineLightning(DumbQuantizationBaselineLightning):
             search_features[valid_mask].detach().float().cpu().numpy(),
             dtype=np.float32,
         )
+        if valid.shape[1] != self.centroids.shape[1]:
+            raise ValueError(
+                "FAISS codebook feature dimension does not match the current data: "
+                f"{self.centroids.shape[1]} != {valid.shape[1]}"
+            )
         _, indices = self._faiss_index.search(valid, 1)
         indices = indices[:, 0].astype(np.int64, copy=False)
         centroid_tensor = torch.as_tensor(
@@ -991,7 +1064,9 @@ class FaissKMeansBaselineLightning(DumbQuantizationBaselineLightning):
             numeric_metrics["baseline/faiss_final_objective"] = self._fit_metadata[
                 "final_objective"
             ]
-        for class_name, count in self._fit_metadata["fit_particles_per_class"].items():
+        for class_name, count in self._fit_metadata.get(
+            "fit_particles_per_class", {}
+        ).items():
             numeric_metrics[f"baseline/fit_particles/{class_name}"] = count
             numeric_metrics[f"baseline/fit_fraction/{class_name}"] = (
                 count / self._fit_metadata["fit_particles_total"]

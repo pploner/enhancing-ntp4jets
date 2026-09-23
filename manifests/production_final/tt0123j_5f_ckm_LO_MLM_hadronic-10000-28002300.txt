@@ -1,0 +1,1 @@
+/eos/project-f/foundational-model-dataset/samples/production_final/tt0123j_5f_ckm_LO_MLM_hadronic-10000-28002300/event.parquet

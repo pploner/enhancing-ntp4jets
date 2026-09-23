@@ -19,7 +19,7 @@ automation/.law/index
 notebooks/*testing.ipynb
 notebooks/plots
 outputs/
-manifests/
+#manifests/
 job_scripts/*tmp*
 *.pt
 

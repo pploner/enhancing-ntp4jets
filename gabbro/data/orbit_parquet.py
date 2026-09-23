@@ -1148,6 +1148,43 @@ def balanced_group_process_quotas(
     return quotas
 
 
+def resolve_process_quotas(
+    process_specs: Mapping[str, Mapping],
+    *,
+    event_budget: int,
+    explicit_quotas: Optional[Mapping[str, int]] = None,
+    context: str,
+) -> dict[str, int]:
+    """Return validated explicit quotas or the canonical balanced allocation."""
+    if explicit_quotas is None:
+        return balanced_group_process_quotas(process_specs, int(event_budget))
+
+    quotas = {str(name): int(value) for name, value in explicit_quotas.items()}
+    expected = set(map(str, process_specs))
+    provided = set(quotas)
+    if provided != expected:
+        missing = sorted(expected - provided)
+        extra = sorted(provided - expected)
+        details = []
+        if missing:
+            details.append(f"missing={missing}")
+        if extra:
+            details.append(f"extra={extra}")
+        raise ValueError(
+            f"{context} explicit event quotas do not match processes: "
+            + ", ".join(details)
+        )
+    non_positive = {name: value for name, value in quotas.items() if value < 1}
+    if non_positive:
+        raise ValueError(f"{context} explicit event quotas must be positive: {non_positive}")
+    if sum(quotas.values()) != int(event_budget):
+        raise ValueError(
+            f"{context} explicit event quotas sum to {sum(quotas.values())}, "
+            f"not event_budget={int(event_budget)}"
+        )
+    return quotas
+
+
 class CanonicalOrbitParquetDataModule(L.LightningDataModule):
     """Group-balanced ORBIT loader with named, independently balanced test suites.
 
@@ -1161,6 +1198,8 @@ class CanonicalOrbitParquetDataModule(L.LightningDataModule):
         test_suites: Mapping[str, Mapping],
         train_event_budget: int = 200_000,
         val_event_budget: int = 200_000,
+        train_event_quotas: Optional[Mapping[str, int]] = None,
+        val_event_quotas: Optional[Mapping[str, int]] = None,
         sequence_type: str = "particle",
         max_sequence_length: Optional[int] = None,
         batch_size: int | Mapping[str, int] = 32,
@@ -1202,6 +1241,7 @@ class CanonicalOrbitParquetDataModule(L.LightningDataModule):
             raise ValueError("train_val_processes must contain at least one process")
         self._test_suite_specs: dict[str, dict[str, dict]] = {}
         self._test_suite_budgets: dict[str, int] = {}
+        self._test_suite_explicit_quotas: dict[str, Optional[Mapping[str, int]]] = {}
         for suite_name, suite_value in dict(test_suites or {}).items():
             if not isinstance(suite_value, Mapping) or "processes" not in suite_value:
                 raise ValueError(
@@ -1209,6 +1249,9 @@ class CanonicalOrbitParquetDataModule(L.LightningDataModule):
                 )
             budget = int(suite_value.get("event_budget", 20_000))
             self._test_suite_budgets[str(suite_name)] = budget
+            self._test_suite_explicit_quotas[str(suite_name)] = suite_value.get(
+                "event_quotas"
+            )
             self._test_suite_specs[str(suite_name)] = self._normalize_process_specs(
                 suite_value["processes"], sequence_type=sequence_type, min_pt=min_pt
             )
@@ -1231,15 +1274,24 @@ class CanonicalOrbitParquetDataModule(L.LightningDataModule):
             name: index for index, name in enumerate(self._test_suite_specs)
         }
 
-        self._train_quotas = balanced_group_process_quotas(
-            self._train_specs, int(train_event_budget)
+        self._train_quotas = resolve_process_quotas(
+            self._train_specs,
+            event_budget=int(train_event_budget),
+            explicit_quotas=train_event_quotas,
+            context="train",
         )
-        self._val_quotas = balanced_group_process_quotas(
-            self._train_specs, int(val_event_budget)
+        self._val_quotas = resolve_process_quotas(
+            self._train_specs,
+            event_budget=int(val_event_budget),
+            explicit_quotas=val_event_quotas,
+            context="validation",
         )
         self._test_quotas = {
-            suite_name: balanced_group_process_quotas(
-                specs, self._test_suite_budgets[suite_name]
+            suite_name: resolve_process_quotas(
+                specs,
+                event_budget=self._test_suite_budgets[suite_name],
+                explicit_quotas=self._test_suite_explicit_quotas[suite_name],
+                context=f"test suite {suite_name!r}",
             )
             for suite_name, specs in self._test_suite_specs.items()
         }

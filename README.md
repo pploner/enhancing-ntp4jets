@@ -933,6 +933,10 @@ starting a trial.
 
 ### Canonical ORBIT datasets
 
+The directly runnable full-statistics eight-model comparison, including the
+standalone-DY SM mixture, is documented in
+[`docs/orbit_full_statistics_campaign.md`](docs/orbit_full_statistics_campaign.md).
+
 Two additive experiment configs define the standard process mixtures without
 replacing any existing experiment:
 

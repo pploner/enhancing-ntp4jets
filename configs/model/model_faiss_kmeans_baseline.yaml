@@ -8,6 +8,7 @@ niter: 25
 nredo: 1
 seed: ${seed}
 use_gpu: true
+codebook_path: null
 
 save_codebook: true
 upload_codebook_to_wandb: true

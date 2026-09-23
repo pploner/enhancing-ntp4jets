@@ -1,0 +1,17 @@
+# @package _global_
+
+defaults:
+  - orbit_campaign_full500_sm_vq4096
+  - _self_
+
+project_name: orbit-campaign-full500-sm-pidweighted-vq4096
+task_name: orbit_campaign_full500_sm_pidweighted_vq4096
+tags: [orbit, campaign, full-statistics, SM, particle-full, vq-ste, codes-4096, pid-weighted]
+
+# Inverse-frequency weights normalized to mean particle weight one. They were
+# measured on a 100k-event group-balanced SM sample with the same leading-500,
+# no-PuppiW-filter selection. This changes only the reconstruction weighting;
+# it does not introduce the experimental log(E) feature.
+pid:
+  reconstruction_class_weights:
+    [0.15915578, 0.95947426, 3.03047641, 3.01511126, 348.77232143, 337.38191633, 283.58818458, 277.07585229]

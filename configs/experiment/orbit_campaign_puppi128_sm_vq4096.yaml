@@ -1,0 +1,23 @@
+# @package _global_
+
+defaults:
+  - orbit_campaign_full500_sm_vq4096
+  - _self_
+
+project_name: orbit-campaign-puppi128-sm-vq4096
+task_name: orbit_campaign_puppi128_sm_vq4096
+tags: [orbit, campaign, full-statistics, SM, particle, puppiw-0p05, vq-ste, codes-4096]
+
+data:
+  sequence_type: particle
+  max_sequence_length: 128
+  batch_size: 256
+
+model:
+  # 40 x 256 = 10,240 representative events retained per test suite.
+  max_test_plot_batches: 40
+  model_kwargs:
+    max_sequence_len: 128
+
+trainer:
+  accumulate_grad_batches: 1

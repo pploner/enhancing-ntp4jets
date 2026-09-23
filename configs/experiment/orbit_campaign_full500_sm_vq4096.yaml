@@ -1,0 +1,45 @@
+# @package _global_
+
+defaults:
+  - override /feature_dict: feature_dict_orbit_absolute.yaml
+  - override /data: orbit_full_statistics_sm.yaml
+  - override /model: model_vqvae_transformer.yaml
+  - override /callbacks: orbit_plotting_callbacks.yaml
+  - override /logger: csv.yaml
+  - override /trainer: gpu.yaml
+  - _self_
+
+project_name: orbit-campaign-full500-sm-vq4096
+task_name: orbit_campaign_full500_sm_vq4096
+tags: [orbit, campaign, full-statistics, SM, particle-full, vq-ste, codes-4096]
+train: true
+test: false
+
+model:
+  # Bound retained plotting data while metrics continue to stream over the full
+  # test suites. 625 x 16 = 10,000 representative events per suite.
+  max_test_plot_batches: 625
+  model_kwargs:
+    input_dim: 4
+    max_sequence_len: 500
+    vq_kwargs:
+      num_codes: 4096
+      rotation_tr: false
+
+trainer:
+  max_epochs: 30
+  enable_checkpointing: true
+  # Preserve the established full-event physical/effective batch behavior.
+  accumulate_grad_batches: 16
+
+callbacks:
+  orbit_plotting_callback:
+    jet_min_pt: 30.0
+    include_tau32: false
+    cache_subset_jet_results: true
+    validation_plot_every_n_epochs: 5
+    include_codebook_histogram: false
+
+extras:
+  enforce_tags: false
+  print_config: true

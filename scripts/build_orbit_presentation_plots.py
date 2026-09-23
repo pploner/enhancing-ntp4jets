@@ -29,6 +29,8 @@ from gabbro.plotting.orbit import (
     RECONSTRUCTED_COLOR,
     codebook_marker_areas,
     multirun_color,
+    multirun_display_label,
+    multirun_legend_sort_key,
     multirun_marker,
 )
 
@@ -37,6 +39,7 @@ PRESENTATION_LEGEND_FONTSIZE = 12
 PRESENTATION_LEGEND_MARKERSCALE = 1.35
 HIGGS_MASS_PLOT_BINS = np.arange(40.0, 205.0, 5.0)
 HIGGS_MASS_EXTENDED_PLOT_BINS = np.arange(40.0, 505.0, 5.0)
+HIGGS_MASS_LOG_PLOT_BINS = np.arange(40.0, 1005.0, 5.0)
 from gabbro.plotting.utils import set_mpl_style
 from scripts.collect_orbit_multirun import _load_histograms, _save_figures
 
@@ -272,7 +275,9 @@ def plot_mu_sigma(records: list[dict], reference: dict, output_path: Path) -> No
         np.isfinite(all_codebook_sizes) & (all_codebook_sizes > 0)
     ]
     codebook_size_range = (float(finite_sizes.min()), float(finite_sizes.max()))
-    for family, family_records in sorted(grouped.items()):
+    for family, family_records in sorted(
+        grouped.items(), key=lambda item: multirun_legend_sort_key(item[0])
+    ):
         ordered = sorted(
             family_records,
             key=lambda record: (record.get("total_codebook_size") or 0, record["label"]),
@@ -291,7 +296,7 @@ def plot_mu_sigma(records: list[dict], reference: dict, output_path: Path) -> No
             ),
             color=color,
             marker=multirun_marker(family),
-            label=family,
+            label=multirun_display_label(family),
             zorder=3,
         )
     if reference.get("success"):
@@ -350,7 +355,9 @@ def plot_mass_response(
     codebook_size_range = (float(finite_sizes.min()), float(finite_sizes.max()))
     original_peak = float(reference["mean"])
 
-    for family, family_records in sorted(grouped.items()):
+    for family, family_records in sorted(
+        grouped.items(), key=lambda item: multirun_legend_sort_key(item[0])
+    ):
         ordered = sorted(
             family_records,
             key=lambda record: (record.get("total_codebook_size") or 0, record["label"]),
@@ -383,7 +390,7 @@ def plot_mass_response(
             ),
             color=color,
             marker=multirun_marker(family),
-            label=family,
+            label=multirun_display_label(family),
             zorder=3,
         )
 
@@ -413,6 +420,7 @@ def plot_near_histogram(
     replicas: int,
     output_path: Path,
     bins: np.ndarray = HIGGS_MASS_PLOT_BINS,
+    log_y: bool = False,
 ) -> None:
     set_mpl_style()
     figure, axis = plt.subplots(figsize=(8, 6))
@@ -435,7 +443,12 @@ def plot_near_histogram(
         str(record["run_dir"]): (index, record)
         for index, record in enumerate(full_manifest)
     }
-    for near in near_manifest:
+    for near in sorted(
+        near_manifest,
+        key=lambda record: multirun_legend_sort_key(
+            record.get("plot_family") or record["label"]
+        ),
+    ):
         key = str(near["run_dir"])
         if key not in full_by_run:
             raise ValueError(f"Near-4096 run is absent from the full manifest: {key}")
@@ -443,7 +456,7 @@ def plot_near_histogram(
         _, decoded = mass_values(cache_dir / f"{index:03d}" / "higgs_candidates.csv")
         decoded = decoded[np.isfinite(decoded)]
         fit = fit_with_bootstrap(decoded, replicas)
-        label = near.get("plot_family") or near["label"]
+        label = multirun_display_label(near.get("plot_family") or near["label"])
         if fit.get("success"):
             label += f" ($\\mu$={fit['mean']:.1f}, $\\sigma$={fit['sigma']:.1f} GeV)"
         axis.hist(
@@ -457,6 +470,8 @@ def plot_near_histogram(
         )
     axis.set_xlabel("Higgs candidate mass [GeV]")
     axis.set_ylabel("Normalized events")
+    if log_y:
+        axis.set_yscale("log")
     axis.legend(
         fontsize=PRESENTATION_LEGEND_FONTSIZE,
         markerscale=PRESENTATION_LEGEND_MARKERSCALE,
@@ -471,6 +486,7 @@ def plot_single_mass_histogram(
     replicas: int,
     output_path: Path,
     bins: np.ndarray = HIGGS_MASS_PLOT_BINS,
+    log_y: bool = False,
 ) -> None:
     """Plot one cached Higgs candidate distribution in presentation style."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -510,6 +526,8 @@ def plot_single_mass_histogram(
     )
     axis.set_xlabel("Higgs candidate mass [GeV]")
     axis.set_ylabel("Normalized events")
+    if log_y:
+        axis.set_yscale("log")
     axis.legend(
         fontsize=PRESENTATION_LEGEND_FONTSIZE,
         markerscale=PRESENTATION_LEGEND_MARKERSCALE,
@@ -570,8 +588,13 @@ def plot_near_observable_histogram(
         linewidth=1.8,
         label="Original",
     )
-    for near, full, decoded in series:
-        label = near.get("plot_family") or near["label"]
+    for near, full, decoded in sorted(
+        series,
+        key=lambda item: multirun_legend_sort_key(
+            item[0].get("plot_family") or item[0]["label"]
+        ),
+    ):
+        label = multirun_display_label(near.get("plot_family") or near["label"])
         axis.hist(
             decoded,
             bins=bins,
@@ -756,6 +779,16 @@ def main() -> None:
         higgs_dir / "higgs_mass_near_4096_extended_500.png",
         bins=HIGGS_MASS_EXTENDED_PLOT_BINS,
     )
+    plot_near_histogram(
+        near_manifest,
+        full_manifest,
+        args.higgs_cache_dir,
+        reference_values,
+        args.bootstrap_replicas,
+        higgs_dir / "higgs_mass_near_4096_log_1000.png",
+        bins=HIGGS_MASS_LOG_PLOT_BINS,
+        log_y=True,
+    )
     plot_near_observable_histogram(
         near_manifest,
         full_manifest,
@@ -802,6 +835,13 @@ def main() -> None:
         args.bootstrap_replicas,
         single_model_dir / "higgs_mass_resolved_extended_500.png",
         bins=HIGGS_MASS_EXTENDED_PLOT_BINS,
+    )
+    plot_single_mass_histogram(
+        vq_ste_mass_cache,
+        args.bootstrap_replicas,
+        single_model_dir / "higgs_mass_resolved_log_1000.png",
+        bins=HIGGS_MASS_LOG_PLOT_BINS,
+        log_y=True,
     )
     plot_single_observable_histogram(
         vq_ste_cache,

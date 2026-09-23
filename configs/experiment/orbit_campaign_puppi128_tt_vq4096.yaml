@@ -1,0 +1,10 @@
+# @package _global_
+
+defaults:
+  - orbit_campaign_puppi128_sm_vq4096
+  - override /data: orbit_full_statistics_tt.yaml
+  - _self_
+
+project_name: orbit-campaign-puppi128-tt-vq4096
+task_name: orbit_campaign_puppi128_tt_vq4096
+tags: [orbit, campaign, full-statistics, tt, particle, puppiw-0p05, vq-ste, codes-4096]

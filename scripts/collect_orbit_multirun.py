@@ -504,7 +504,7 @@ def _compression_ratio_figure(
     show_title: bool = True,
 ):
     """Plot reconstruction error against the fraction of a fixed-width payload."""
-    return plot_multirun_metric(
+    figure = plot_multirun_metric(
         _records_with_compression_ratio(records, reference_bits),
         "plot_metrics/reco_mse_total",
         "Reconstruction MSE",
@@ -519,6 +519,13 @@ def _compression_ratio_figure(
         scale_marker_by_codebook_size=True,
         marker_area_scale=PRESENTATION_CODEBOOK_MARKER_AREA_SCALE,
     )
+    if figure is not None:
+        # This is the longest x-axis label in the presentation collection.  A
+        # wider canvas prevents its leading glyph from touching the tight
+        # output bounding box for samples with narrow y-axis tick labels.
+        figure.set_size_inches(9.5, 6.0, forward=True)
+        figure.tight_layout()
+    return figure
 
 
 def _save_figures(

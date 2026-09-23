@@ -17,7 +17,13 @@ from scripts.collect_orbit_multirun import (
 from scripts.collect_orbit_multirun import _quantizer_metadata
 from scripts.collect_orbit_multirun import _wandb_upload_settings
 from scripts.collect_orbit_multirun import _artifact_prefix
-from gabbro.plotting.orbit import multirun_color, multirun_marker, plot_multirun_metric
+from gabbro.plotting.orbit import (
+    multirun_color,
+    multirun_display_label,
+    multirun_legend_sort_key,
+    multirun_marker,
+    plot_multirun_metric,
+)
 
 
 def test_entropy_multirun_figures_are_written(tmp_path):
@@ -60,6 +66,20 @@ def test_compression_ratio_uses_40_bit_payload_denominator():
 
     assert normalized[0]["plot_metrics/compression_ratio"] == pytest.approx(0.25)
     assert "plot_metrics/compression_ratio" not in records[0]
+
+
+def test_compression_ratio_plot_has_room_for_full_axis_label():
+    figure = _compression_ratio_figure(
+        [
+            {
+                "label": "VQ STE",
+                "metrics/rate/marginal_bits_per_input_particle": 10.0,
+                "plot_metrics/reco_mse_total": 0.1,
+            }
+        ]
+    )
+
+    assert tuple(figure.get_size_inches()) == (9.5, 6.0)
 
 
 def test_compression_ratio_plot_is_linear_without_payload_reference_line():
@@ -256,6 +276,50 @@ def test_split_quantizer_families_have_distinct_styles():
 
     assert len({multirun_color(family) for family in families}) == len(families)
     assert len({multirun_marker(family) for family in families}) == len(families)
+
+
+def test_training_domain_style_aliases_match_presentation_labels():
+    tt_labels = ("TT_only", "Trained on tt", "tt-trained VQ-STE")
+    mixture_labels = (
+        "SM_mixture",
+        "Trained on SM mixture",
+        "mixture-trained VQ-STE",
+    )
+
+    assert len({multirun_color(label) for label in tt_labels}) == 1
+    assert len({multirun_marker(label) for label in tt_labels}) == 1
+    assert len({multirun_color(label) for label in mixture_labels}) == 1
+    assert len({multirun_marker(label) for label in mixture_labels}) == 1
+
+
+def test_phaedra_split_architectures_are_prefixed_and_stacked():
+    families = [
+        "VQ STE",
+        "FSQ μ + α=64",
+        "FAISS k-means",
+        "VQ μ + FSQ α=32",
+    ]
+    ordered = sorted(families, key=multirun_legend_sort_key)
+
+    assert ordered[:2] == ["VQ μ + FSQ α=32", "FSQ μ + α=64"]
+    assert multirun_display_label(ordered[0]) == "(PHAEDRA) VQ μ + FSQ α=32"
+    assert multirun_display_label(ordered[1]) == "(PHAEDRA) FSQ μ + α=64"
+
+    figure = plot_multirun_metric(
+        [
+            {"label": family, "plot_family": family, "rate": index + 1, "mse": 0.1}
+            for index, family in enumerate(families)
+        ],
+        "mse",
+        "MSE",
+        "Comparison",
+        x_metric="rate",
+    )
+    legend_labels = [text.get_text() for text in figure.axes[0].legend().get_texts()]
+    assert legend_labels[:2] == [
+        "(PHAEDRA) VQ μ + FSQ α=32",
+        "(PHAEDRA) FSQ μ + α=64",
+    ]
 
 
 def test_multirun_wandb_upload_uses_detected_credentials(monkeypatch, tmp_path):

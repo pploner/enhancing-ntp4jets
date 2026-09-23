@@ -18,6 +18,9 @@ defaults:
   # e.g. best hyperparameters for given model and datamodule
   - experiment: example_experiment_generative.yaml
 
+  # optional named test-suite selection for separate evaluation jobs
+  - evaluation: null
+
   # config for hyperparameter optimization
   - hparams_search: null
 
@@ -57,6 +60,16 @@ seed: 12345
 # and the corresponding model will be evaluated. Note that it will also load the
 # config.yaml in that directory, so any overrides need to be specified for that format.
 ckpt_path_for_evaluation: null
+
+# Optional subset of named data.test_suites. Evaluation configs set this to one
+# suite so tests can run and fail independently.
+evaluation_test_suites: null
+evaluation_output_name: null
+
+# Keep the evaluation job's logger when loading a model from a checkpoint.
+# This is enabled by the named evaluation configs below, while preserving the
+# historical default for ad-hoc checkpoint evaluations.
+log_checkpoint_evaluation: false
 
 # this option is used if you run on a cluster with very limited training time per job
 # --> then you can specify the output dir like this, and the training will continue

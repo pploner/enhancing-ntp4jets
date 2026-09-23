@@ -58,7 +58,7 @@ from hydra import compose
 from hydra.core.config_store import ConfigStore
 from hydra.core.hydra_config import HydraConfig
 from lightning.pytorch.loggers import Logger
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 from torch.distributed import get_rank, get_world_size
 # ------------------------------------------------------------------------------------ #
 # the setup_root above is equivalent to:
@@ -567,7 +567,10 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
 
     log.info(f"Slurm job ID: {object_dict['slurm']['job_id']}")
 
-    if logger and cfg.get("ckpt_path_for_evaluation") is None:
+    log_checkpoint_evaluation = bool(cfg.get("log_checkpoint_evaluation", False))
+    if logger and (
+        cfg.get("ckpt_path_for_evaluation") is None or log_checkpoint_evaluation
+    ):
         log.info("Logging hyperparameters!")
         log_hyperparameters(object_dict)
         _log_data_split_summary(trainer, datamodule)
@@ -769,7 +772,10 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 cfg.trainer.strategy = "auto"
                 trainer = hydra.utils.instantiate(
                     cfg.trainer,
-                    logger=logger if cfg.get("ckpt_path_for_evaluation") is None else None,
+                    logger=logger
+                    if cfg.get("ckpt_path_for_evaluation") is None
+                    or log_checkpoint_evaluation
+                    else None,
                     callbacks=list(callbacks.values()),
                 )
                 trainer.test(
@@ -783,7 +789,10 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
         else:
             trainer = hydra.utils.instantiate(
                 cfg.trainer,
-                logger=logger if cfg.get("ckpt_path_for_evaluation") is None else None,
+                logger=logger
+                if cfg.get("ckpt_path_for_evaluation") is None
+                or log_checkpoint_evaluation
+                else None,
                 callbacks=list(callbacks.values()),
             )
             trainer.test(
@@ -795,6 +804,27 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
         metric_dict.update(dict(trainer.callback_metrics))
 
     return metric_dict, object_dict
+
+
+def _select_evaluation_test_suites(cfg: DictConfig) -> None:
+    """Restrict a data config to the independently requested test suites."""
+    selected_test_suites = cfg.get("evaluation_test_suites")
+    if not selected_test_suites:
+        return
+    if isinstance(selected_test_suites, str):
+        selected_test_suites = [selected_test_suites]
+    available_test_suites = cfg.data.get("test_suites") or {}
+    missing_test_suites = [
+        name for name in selected_test_suites if name not in available_test_suites
+    ]
+    if missing_test_suites:
+        raise ValueError(
+            "Unknown evaluation test suite(s): "
+            + ", ".join(map(str, missing_test_suites))
+        )
+    cfg.data.test_suites = {
+        name: available_test_suites[name] for name in selected_test_suites
+    }
 
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="train.yaml")
@@ -826,6 +856,24 @@ def main(cfg: DictConfig) -> Optional[float]:
     if cfg.logger.get("wandb") is not None:
         if not cfg.logger.wandb.get("name"):
             cfg.logger.wandb.name = experiment_name
+        evaluation_name = cfg.get("evaluation_output_name")
+        if evaluation_name and str(cfg.logger.wandb.get("name")) == experiment_name:
+            cfg.logger.wandb.name = f"{experiment_name}_{evaluation_name}"
+
+    # Named evaluation configs describe the test job, so preserve their small
+    # set of controls when the model's complete training config is reloaded.
+    requested_evaluation_test_suites = cfg.get("evaluation_test_suites")
+    if requested_evaluation_test_suites is not None:
+        requested_evaluation_test_suites = OmegaConf.to_container(
+            requested_evaluation_test_suites, resolve=True
+        )
+    requested_log_checkpoint_evaluation = bool(
+        cfg.get("log_checkpoint_evaluation", False)
+    )
+    requested_evaluation_output_name = cfg.get("evaluation_output_name")
+    requested_logger = OmegaConf.create(
+        OmegaConf.to_container(cfg.logger, resolve=False)
+    )
 
     # load full config from file if specified
     if cfg.get("ckpt_path_for_evaluation") is not None:
@@ -850,9 +898,16 @@ def main(cfg: DictConfig) -> Optional[float]:
             # The initial Hydra composition may need an experiment selector,
             # but the loaded checkpoint is already a complete config and has
             # no experiment defaults entry to override.
-            if not override.startswith("experiment=")
+            if not override.startswith(("experiment=", "evaluation=", "logger="))
+            and not override.startswith("logger.")
         ]
         cfg = compose(config_name="cfg_ckpt", overrides=checkpoint_overrides)
+
+        with open_dict(cfg):
+            cfg.evaluation_test_suites = requested_evaluation_test_suites
+            cfg.log_checkpoint_evaluation = requested_log_checkpoint_evaluation
+            cfg.evaluation_output_name = requested_evaluation_output_name
+            cfg.logger = requested_logger
 
         # A checkpoint normally inherits its training datamodule verbatim.  For
         # cross-domain tests, merge only the data section from another config
@@ -893,23 +948,6 @@ def main(cfg: DictConfig) -> Optional[float]:
                     merged_data[key] = evaluation_data_values[key]
             cfg.data = merged_data
 
-        selected_test_suites = cfg.get("evaluation_test_suites")
-        if selected_test_suites:
-            if isinstance(selected_test_suites, str):
-                selected_test_suites = [selected_test_suites]
-            available_test_suites = cfg.data.get("test_suites") or {}
-            missing_test_suites = [
-                name for name in selected_test_suites if name not in available_test_suites
-            ]
-            if missing_test_suites:
-                raise ValueError(
-                    "Unknown evaluation test suite(s): "
-                    + ", ".join(map(str, missing_test_suites))
-                )
-            cfg.data.test_suites = {
-                name: available_test_suites[name] for name in selected_test_suites
-            }
-
         # set the output dir to the parent of the ckpt config path
         log.info(f"Setting output dir to {cfg_ckpt_path.parent}")
         cfg.paths.output_dir = cfg_ckpt_path.parent
@@ -933,6 +971,8 @@ def main(cfg: DictConfig) -> Optional[float]:
         # cfg.trainer.num_nodes = 1
         # cfg.trainer.devices = 1
         # cfg.trainer.strategy = "auto"
+
+    _select_evaluation_test_suites(cfg)
 
     # train the model
     metric_dict, _ = train(cfg)

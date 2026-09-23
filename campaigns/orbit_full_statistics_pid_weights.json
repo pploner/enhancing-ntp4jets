@@ -1,0 +1,242 @@
+{
+  "event_sample": 100000,
+  "top_level_training_groups": [
+    "QCD",
+    "tt",
+    "VJets",
+    "VV",
+    "DY"
+  ],
+  "selections": {
+    "full500": {
+      "selection": "full500",
+      "experiment": "orbit_campaign_full500_sm_vq4096",
+      "events": 100000,
+      "particles": 50000000,
+      "pid_counts": [
+        39269701,
+        6513984,
+        2062382,
+        2072892,
+        17920,
+        18525,
+        22039,
+        22557
+      ],
+      "inverse_frequency_weights": [
+        0.15915578272419237,
+        0.9594742633693911,
+        3.030476410286746,
+        3.015111255193228,
+        348.77232142857144,
+        337.38191632928476,
+        283.5881845818776,
+        277.0758522853216
+      ],
+      "normalization": "total_particles / (8 * pid_count)",
+      "split_seed": 42,
+      "shuffle_seed": 42,
+      "manifests": {
+        "QCD_HT50tobb": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/QCD_HT50tobb_train_val.txt",
+          "sha256": "d8cd335298fb89bc9ca6767fa8110ca55bf8d434d496e46bca062e807f7b8757"
+        },
+        "QCD_HT50toInf": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/QCD_HT50toInf_train_val.txt",
+          "sha256": "7ba9d3e82cc0b63570e794ea7b4b90c2b940fec70f35ced724fb1011a7dec648"
+        },
+        "tt_hadronic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/tt0123j_5f_ckm_LO_MLM_hadronic_train_val.txt",
+          "sha256": "7008008e8d59e9f2f706b660e92347d605f8ca4ca7e322d637572c7b90c0f0db"
+        },
+        "tt_leptonic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/tt0123j_5f_ckm_LO_MLM_leptonic_train_val.txt",
+          "sha256": "823f45c59bb43c80517c809234626b039a8570986bd7bf8a65d6098c6b6e3e60"
+        },
+        "tt_semileptonic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/tt0123j_5f_ckm_LO_MLM_semiLeptonic_train_val.txt",
+          "sha256": "40fdbc7f4884d3934d22732bc67287c8a6cf9a7b5e7193b5d797cfec964c458f"
+        },
+        "WJetsToLNu": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/WJetsToLNu_13TeV-madgraphMLM-pythia8_train_val.txt",
+          "sha256": "e9ef2cd0da9c9a23d98a2d17aafca128d88fb6cfd677d4514be5b7112a5bd939"
+        },
+        "WJetsToQQ": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/WJetsToQQ_13TeV-madgraphMLM-pythia8_train_val.txt",
+          "sha256": "52ac549936f6750ba1c6f6967de1cf85b18f1cb199ba2ac8b9debec793752303"
+        },
+        "DYJetsToLL": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/DYJetsToLL_13TeV-madgraphMLM-pythia8_train_val.txt",
+          "sha256": "8a2b5a9936877f30ccbc51cc97a040b12f34602311b401c4eed2baba23ad837a"
+        },
+        "ZJetsTobb": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/ZJetsTobb_13TeV-madgraphMLM-pythia8_train_val.txt",
+          "sha256": "4bebdd7a5fe3fb8be82cf250997da7fba6c9631d1ebc490867a9c3739a90047d"
+        },
+        "ZJetsTocc": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/ZJetsTocc_13TeV-madgraphMLM-pythia8_train_val.txt",
+          "sha256": "02afd6bb684196c71273cdb31720bd05eae73bf30fee8b918ccf6f15314ad13c"
+        },
+        "ZJetsToQQ": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/ZJetsToQQ_13TeV-madgraphMLM-pythia8_train_val.txt",
+          "sha256": "1aba9fcb3101ed000f681996bbbbdb5eedd258827b086d8d10eed9b5948bc324"
+        },
+        "ZJetsTovv": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/ZJetsTovv_13TeV-madgraphMLM-pythia8_train_val.txt",
+          "sha256": "5b287d8f132d624e415e0cb599236952b1de2c20502774d4250f9df2025627c6"
+        },
+        "WW_hadronic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/WW_hadronic_train_val.txt",
+          "sha256": "ae06f764597eac6105b7eaf24b04f3c8dcbc5729a1f9c7c24d13a22ea36e4981"
+        },
+        "WW_leptonic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/WW_leptonic_train_val.txt",
+          "sha256": "d4e8dc6053eddd7c66493d1f252337b457e5d2ed7c6596616fddf6b309f45aef"
+        },
+        "WW_semileptonic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/WW_semileptonic_train_val.txt",
+          "sha256": "01a7861adbbca223989da61ffad7f2564e68c393ca32e61f8426fae578f8106a"
+        },
+        "WZ_hadronic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/WZ_hadronic_train_val.txt",
+          "sha256": "3020ae7ded2630dffcd5c3580353818ee11df56f7215a8b1a96ea5fff44d4d07"
+        },
+        "WZ_leptonic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/WZ_leptonic_train_val.txt",
+          "sha256": "879ff7af23eb326609d370280c9ce29650e488cd5cdeb9a0e42cd17ff455a3a9"
+        },
+        "WZ_semileptonic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/WZ_semileptonic_train_val.txt",
+          "sha256": "efef2b848cc795160628fb580e1cd966548d5fab171d58ed3245dadf13cb0a30"
+        },
+        "ZZ_hadronic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/ZZ_hadronic_train_val.txt",
+          "sha256": "825f84139c091a04215cf08254be652e1a00eb570418ee149f538e984ad3cc07"
+        },
+        "ZZ_leptonic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/ZZ_leptonic_train_val.txt",
+          "sha256": "94ed31049d19c734b1eb3b1ef6afdcc3c1fb22953318555c22116b8d8b47b12f"
+        },
+        "ZZ_semileptonic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/ZZ_semileptonic_train_val.txt",
+          "sha256": "d3914b061ef5b40c207de4be09e8b6970e717e12d35d9327e6401a666d9fac10"
+        }
+      }
+    },
+    "puppi128": {
+      "selection": "puppi128",
+      "experiment": "orbit_campaign_puppi128_sm_vq4096",
+      "events": 100000,
+      "particles": 2053529,
+      "pid_counts": [
+        383584,
+        290178,
+        641783,
+        645079,
+        20471,
+        21166,
+        25382,
+        25886
+      ],
+      "inverse_frequency_weights": [
+        0.6691914287352966,
+        0.8845988496715809,
+        0.39996560363861305,
+        0.39792199870093425,
+        12.53925675345611,
+        12.127521732967969,
+        10.113116578677804,
+        9.916214362976126
+      ],
+      "normalization": "total_particles / (8 * pid_count)",
+      "split_seed": 42,
+      "shuffle_seed": 42,
+      "manifests": {
+        "QCD_HT50tobb": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/QCD_HT50tobb_train_val.txt",
+          "sha256": "d8cd335298fb89bc9ca6767fa8110ca55bf8d434d496e46bca062e807f7b8757"
+        },
+        "QCD_HT50toInf": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/QCD_HT50toInf_train_val.txt",
+          "sha256": "7ba9d3e82cc0b63570e794ea7b4b90c2b940fec70f35ced724fb1011a7dec648"
+        },
+        "tt_hadronic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/tt0123j_5f_ckm_LO_MLM_hadronic_train_val.txt",
+          "sha256": "7008008e8d59e9f2f706b660e92347d605f8ca4ca7e322d637572c7b90c0f0db"
+        },
+        "tt_leptonic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/tt0123j_5f_ckm_LO_MLM_leptonic_train_val.txt",
+          "sha256": "823f45c59bb43c80517c809234626b039a8570986bd7bf8a65d6098c6b6e3e60"
+        },
+        "tt_semileptonic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/tt0123j_5f_ckm_LO_MLM_semiLeptonic_train_val.txt",
+          "sha256": "40fdbc7f4884d3934d22732bc67287c8a6cf9a7b5e7193b5d797cfec964c458f"
+        },
+        "WJetsToLNu": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/WJetsToLNu_13TeV-madgraphMLM-pythia8_train_val.txt",
+          "sha256": "e9ef2cd0da9c9a23d98a2d17aafca128d88fb6cfd677d4514be5b7112a5bd939"
+        },
+        "WJetsToQQ": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/WJetsToQQ_13TeV-madgraphMLM-pythia8_train_val.txt",
+          "sha256": "52ac549936f6750ba1c6f6967de1cf85b18f1cb199ba2ac8b9debec793752303"
+        },
+        "DYJetsToLL": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/DYJetsToLL_13TeV-madgraphMLM-pythia8_train_val.txt",
+          "sha256": "8a2b5a9936877f30ccbc51cc97a040b12f34602311b401c4eed2baba23ad837a"
+        },
+        "ZJetsTobb": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/ZJetsTobb_13TeV-madgraphMLM-pythia8_train_val.txt",
+          "sha256": "4bebdd7a5fe3fb8be82cf250997da7fba6c9631d1ebc490867a9c3739a90047d"
+        },
+        "ZJetsTocc": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/ZJetsTocc_13TeV-madgraphMLM-pythia8_train_val.txt",
+          "sha256": "02afd6bb684196c71273cdb31720bd05eae73bf30fee8b918ccf6f15314ad13c"
+        },
+        "ZJetsToQQ": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/ZJetsToQQ_13TeV-madgraphMLM-pythia8_train_val.txt",
+          "sha256": "1aba9fcb3101ed000f681996bbbbdb5eedd258827b086d8d10eed9b5948bc324"
+        },
+        "ZJetsTovv": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/ZJetsTovv_13TeV-madgraphMLM-pythia8_train_val.txt",
+          "sha256": "5b287d8f132d624e415e0cb599236952b1de2c20502774d4250f9df2025627c6"
+        },
+        "WW_hadronic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/WW_hadronic_train_val.txt",
+          "sha256": "ae06f764597eac6105b7eaf24b04f3c8dcbc5729a1f9c7c24d13a22ea36e4981"
+        },
+        "WW_leptonic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/WW_leptonic_train_val.txt",
+          "sha256": "d4e8dc6053eddd7c66493d1f252337b457e5d2ed7c6596616fddf6b309f45aef"
+        },
+        "WW_semileptonic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/WW_semileptonic_train_val.txt",
+          "sha256": "01a7861adbbca223989da61ffad7f2564e68c393ca32e61f8426fae578f8106a"
+        },
+        "WZ_hadronic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/WZ_hadronic_train_val.txt",
+          "sha256": "3020ae7ded2630dffcd5c3580353818ee11df56f7215a8b1a96ea5fff44d4d07"
+        },
+        "WZ_leptonic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/WZ_leptonic_train_val.txt",
+          "sha256": "879ff7af23eb326609d370280c9ce29650e488cd5cdeb9a0e42cd17ff455a3a9"
+        },
+        "WZ_semileptonic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/WZ_semileptonic_train_val.txt",
+          "sha256": "efef2b848cc795160628fb580e1cd966548d5fab171d58ed3245dadf13cb0a30"
+        },
+        "ZZ_hadronic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/ZZ_hadronic_train_val.txt",
+          "sha256": "825f84139c091a04215cf08254be652e1a00eb570418ee149f538e984ad3cc07"
+        },
+        "ZZ_leptonic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/ZZ_leptonic_train_val.txt",
+          "sha256": "94ed31049d19c734b1eb3b1ef6afdcc3c1fb22953318555c22116b8d8b47b12f"
+        },
+        "ZZ_semileptonic": {
+          "path": "/eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final/ZZ_semileptonic_train_val.txt",
+          "sha256": "d3914b061ef5b40c207de4be09e8b6970e717e12d35d9327e6401a666d9fac10"
+        }
+      }
+    }
+  }
+}

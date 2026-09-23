@@ -40,11 +40,22 @@ class _FakeKmeans:
         self.obj = [3.5]
 
 
+class _FakeFlatIndex(_FakeIndex):
+    def __init__(self, dimension):
+        self.dimension = dimension
+        self.centroids = None
+
+    def add(self, centroids):
+        assert centroids.shape[1] == self.dimension
+        self.centroids = centroids
+
+
 def _fake_faiss_module():
     return SimpleNamespace(
         __version__="test",
         get_num_gpus=lambda: 1,
         Kmeans=_FakeKmeans,
+        IndexFlatL2=_FakeFlatIndex,
     )
 
 
@@ -155,3 +166,32 @@ def test_local_codebook_artifacts(tmp_path):
     metadata_file = tmp_path / "artifacts" / "faiss_kmeans_metadata.json"
     assert np.load(centroid_file)["centroids"].shape == (2, 4)
     assert json.loads(metadata_file.read_text()) == {"num_codes": 2}
+
+
+def test_load_saved_codebook_without_training_data(monkeypatch, tmp_path):
+    monkeypatch.setitem(sys.modules, "faiss", _fake_faiss_module())
+    codebook_path = tmp_path / "faiss_kmeans_centroids.npz"
+    centroids = np.array(
+        [[0.0, 1.0, 0.0, 0.0], [1.0, 0.0, 1.0, 1.0]],
+        dtype=np.float32,
+    )
+    np.savez_compressed(codebook_path, centroids=centroids)
+    model = FaissKMeansBaselineLightning(
+        num_codes=2,
+        fit_max_particles=2,
+        use_gpu=False,
+        codebook_path=codebook_path,
+        save_codebook=False,
+    )
+
+    model._fit_faiss()
+    values = torch.tensor([[[0.01, 0.99, 0.01, 0.01]]], dtype=torch.float32)
+    reconstructed, code_idx, _ = model._quantize_batch(
+        values,
+        torch.tensor([[True]]),
+    )
+
+    assert model._fit_metadata["loaded_codebook_path"] == str(codebook_path.resolve())
+    assert model._fit_metadata["fit_seconds"] == 0.0
+    assert code_idx.tolist() == [[0]]
+    assert torch.allclose(reconstructed[0, 0], torch.tensor(centroids[0]))

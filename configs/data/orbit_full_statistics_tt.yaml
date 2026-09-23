@@ -1,0 +1,17 @@
+defaults:
+  - orbit_full_statistics
+  - _self_
+
+# Use every tt event; preserve the small natural decay-mode imbalance.
+train_event_quotas:
+  tt_hadronic: 17052902
+  tt_leptonic: 17143071
+  tt_semileptonic: 17142602
+val_event_quotas:
+  tt_hadronic: 4280330
+  tt_leptonic: 4288333
+  tt_semileptonic: 4287823
+train_val_processes:
+  tt_hadronic: {paths: "${data.process_catalog.tt_hadronic.train_val}", group: tt}
+  tt_leptonic: {paths: "${data.process_catalog.tt_leptonic.train_val}", group: tt}
+  tt_semileptonic: {paths: "${data.process_catalog.tt_semileptonic.train_val}", group: tt}

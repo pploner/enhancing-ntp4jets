@@ -1,0 +1,16 @@
+# @package _global_
+
+defaults:
+  - orbit_campaign_puppi128_sm_vq4096
+  - _self_
+
+project_name: orbit-campaign-puppi128-sm-pidweighted-vq4096
+task_name: orbit_campaign_puppi128_sm_pidweighted_vq4096
+tags: [orbit, campaign, full-statistics, SM, particle, puppiw-0p05, vq-ste, codes-4096, pid-weighted]
+
+# Selection-specific inverse-frequency weights, normalized to mean particle
+# weight one on a 100k-event group-balanced SM sample after PuppiW > 0.05 and
+# the leading-128 truncation. No log(E) feature is enabled.
+pid:
+  reconstruction_class_weights:
+    [0.66919143, 0.88459885, 0.39996560, 0.39792200, 12.53925675, 12.12752173, 10.11311658, 9.91621436]

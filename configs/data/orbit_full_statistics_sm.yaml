@@ -1,0 +1,28 @@
+defaults:
+  - orbit_full_statistics
+  - _self_
+
+# Five equally weighted top-level classes, followed by equal subprocess
+# weighting within each class. DY is deliberately independent of VJets.
+train_val_processes:
+  QCD_HT50tobb: {paths: "${data.process_catalog.QCD_HT50tobb.train_val}", group: QCD}
+  QCD_HT50toInf: {paths: "${data.process_catalog.QCD_HT50toInf.train_val}", group: QCD}
+  tt_hadronic: {paths: "${data.process_catalog.tt_hadronic.train_val}", group: tt}
+  tt_leptonic: {paths: "${data.process_catalog.tt_leptonic.train_val}", group: tt}
+  tt_semileptonic: {paths: "${data.process_catalog.tt_semileptonic.train_val}", group: tt}
+  WJetsToLNu: {paths: "${data.process_catalog.WJetsToLNu.train_val}", group: VJets}
+  WJetsToQQ: {paths: "${data.process_catalog.WJetsToQQ.train_val}", group: VJets}
+  DYJetsToLL: {paths: "${data.process_catalog.DYJetsToLL.train_val}", group: DY}
+  ZJetsTobb: {paths: "${data.process_catalog.ZJetsTobb.train_val}", group: VJets}
+  ZJetsTocc: {paths: "${data.process_catalog.ZJetsTocc.train_val}", group: VJets}
+  ZJetsToQQ: {paths: "${data.process_catalog.ZJetsToQQ.train_val}", group: VJets}
+  ZJetsTovv: {paths: "${data.process_catalog.ZJetsTovv.train_val}", group: VJets}
+  WW_hadronic: {paths: "${data.process_catalog.WW_hadronic.train_val}", group: VV}
+  WW_leptonic: {paths: "${data.process_catalog.WW_leptonic.train_val}", group: VV}
+  WW_semileptonic: {paths: "${data.process_catalog.WW_semileptonic.train_val}", group: VV}
+  WZ_hadronic: {paths: "${data.process_catalog.WZ_hadronic.train_val}", group: VV}
+  WZ_leptonic: {paths: "${data.process_catalog.WZ_leptonic.train_val}", group: VV}
+  WZ_semileptonic: {paths: "${data.process_catalog.WZ_semileptonic.train_val}", group: VV}
+  ZZ_hadronic: {paths: "${data.process_catalog.ZZ_hadronic.train_val}", group: VV}
+  ZZ_leptonic: {paths: "${data.process_catalog.ZZ_leptonic.train_val}", group: VV}
+  ZZ_semileptonic: {paths: "${data.process_catalog.ZZ_semileptonic.train_val}", group: VV}

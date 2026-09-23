@@ -1,0 +1,14 @@
+# @package _global_
+
+defaults:
+  - orbit_campaign_full500_sm_vq4096
+  - _self_
+
+project_name: orbit-campaign-full500-sm-vq8192
+task_name: orbit_campaign_full500_sm_vq8192
+tags: [orbit, campaign, full-statistics, SM, particle-full, vq-ste, codes-8192]
+
+model:
+  model_kwargs:
+    vq_kwargs:
+      num_codes: 8192

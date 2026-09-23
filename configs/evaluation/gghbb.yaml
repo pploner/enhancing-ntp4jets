@@ -1,0 +1,10 @@
+# @package _global_
+
+train: false
+test: true
+evaluation_test_suites: [gghbb]
+evaluation_output_name: gghbb
+log_checkpoint_evaluation: true
+
+trainer:
+  limit_test_batches: null

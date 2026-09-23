@@ -1,0 +1,10 @@
+# @package _global_
+
+train: false
+test: true
+evaluation_test_suites: [sm_mixture]
+evaluation_output_name: sm_mixture
+log_checkpoint_evaluation: true
+
+trainer:
+  limit_test_batches: null

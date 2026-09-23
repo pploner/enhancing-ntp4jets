@@ -1,0 +1,10 @@
+# @package _global_
+
+train: false
+test: true
+evaluation_test_suites: [ttbar]
+evaluation_output_name: ttbar
+log_checkpoint_evaluation: true
+
+trainer:
+  limit_test_batches: null

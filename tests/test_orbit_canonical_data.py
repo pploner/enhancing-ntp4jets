@@ -4,11 +4,13 @@ from collections import Counter
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pytest
 
 from gabbro.data.orbit_parquet import (
     CanonicalOrbitParquetDataModule,
     OrbitParquetDataset,
     balanced_group_process_quotas,
+    resolve_process_quotas,
 )
 
 
@@ -46,6 +48,39 @@ def test_balanced_quotas_split_groups_before_processes():
 
     assert quotas == {"qcd_a": 3, "qcd_b": 3, "tt_a": 2, "tt_b": 2, "tt_c": 1}
     assert sum(quotas.values()) == 11
+
+
+def test_explicit_quotas_preserve_natural_process_counts():
+    specs = {"hadronic": {}, "leptonic": {}, "semileptonic": {}}
+    quotas = resolve_process_quotas(
+        specs,
+        event_budget=12,
+        explicit_quotas={"hadronic": 3, "leptonic": 4, "semileptonic": 5},
+        context="ttbar test",
+    )
+
+    assert quotas == {"hadronic": 3, "leptonic": 4, "semileptonic": 5}
+
+
+@pytest.mark.parametrize(
+    "explicit_quotas, message",
+    [
+        ({"hadronic": 5, "leptonic": 7}, "do not match processes"),
+        (
+            {"hadronic": 3, "leptonic": 4, "semileptonic": 4},
+            "not event_budget=12",
+        ),
+    ],
+)
+def test_explicit_quotas_are_strictly_validated(explicit_quotas, message):
+    specs = {"hadronic": {}, "leptonic": {}, "semileptonic": {}}
+    with pytest.raises(ValueError, match=message):
+        resolve_process_quotas(
+            specs,
+            event_budget=12,
+            explicit_quotas=explicit_quotas,
+            context="ttbar test",
+        )
 
 
 def test_parquet_metadata_is_scanned_lazily_until_event_budget(tmp_path, monkeypatch):
