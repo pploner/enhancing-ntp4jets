@@ -6,6 +6,10 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import matplotlib
+
+matplotlib.use("Agg")
+
 import pyrootutils
 
 
@@ -470,7 +474,7 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
                 f"imported in gabbro.lightning_models. "
                 f"Available models are: {dir(gabbro_lightning_models)}"
             )
-        model = lightning_module_class.load_from_checkpoint(ckpt_path)
+        model = lightning_module_class.load_from_checkpoint(ckpt_path, weights_only=False)
     else:
         ckpt_path = None
         log.info(f"Instantiating model <{cfg.model._target_}>")
@@ -603,7 +607,7 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
             Path(untrained_model_checkpoint).parent.mkdir(parents=True, exist_ok=True)
             torch.save(model.state_dict(), untrained_model_checkpoint)
             log.info(f"Saved untrained model state dict to {untrained_model_checkpoint}")
-        trainer.fit(model=model, datamodule=datamodule, ckpt_path=ckpt_path)
+        trainer.fit(model=model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
         metric_dict.update(dict(trainer.callback_metrics))
 
     if cfg.get("test"):
