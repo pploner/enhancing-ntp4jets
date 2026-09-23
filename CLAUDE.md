@@ -14,6 +14,15 @@ Runs inside a CERN NGT Kubernetes pod, not a normal machine.
   `scripts/condor_run_training.sh` is lxplus-only and cannot run.
   Do not propose changes to it or suggest submitting jobs.
 - `Tokenizer/` and `test_data/` are gitignored and absent from the clone.
+- Real production data (the collide-2v full dataset) lives at
+  `/eos/project/f/foundational-model-dataset/samples/production_final/`,
+  one subdirectory per physics process — readable from this pod. Personal
+  paths like `/eos/home-y/yelberke/...` or `/eos/user/y/yelberke/...`
+  (referenced in README.md and some experiment configs' `load_weights_from`)
+  are NOT accessible — permission denied. Generate local manifests from
+  the collide-2v path with `scripts/make_eos_manifests.py` +
+  `scripts/split_orbit_canonical_manifests.py` before setting
+  `ORBIT_MANIFEST_DIR`.
 
 ## Rules
 - Always `uv run`. **Never `uv lock` or `uv add`** without asking —
@@ -71,6 +80,48 @@ Environment is managed with `uv` (Python 3.12).
 - **HTCondor jobs**: `condor/` has ~90 `.sub`/`.dag` files, launched via `scripts/condor_run_training.sh` using `conda run` (not `uv`). Site-specific vars (`PROJECT_DIR`, `OUTPUT_DIR`, `CONDA_ENV`, `ORBIT_MANIFEST_DIR`, `GABBRO_ENV_FILE`) are edited at the top of each `.sub` file.
 - **`vqtorch/`**: vendored third-party VQ library, installed as a local `uv` path dependency (`[tool.uv.sources]` in `pyproject.toml`) — treat as third-party code, not project code.
 - **`.project-root`**: marker file required by `pyrootutils.setup_root()` for resolving `PROJECT_ROOT` and `configs/paths/default.yaml` regardless of invocation directory — do not delete it.
+
+## Data preprocessing/caching at scale (future work, not implemented)
+
+The ORBIT parquet pipeline currently has **no preprocessing cache**:
+`OrbitPreprocessor.forward` (`gabbro/data/orbit_parquet.py:219-234`) is a
+fixed, hardcoded transform (`eta/3`, `cos/sin(phi)`, `log(pt)-1.8`, no
+fitted stats) applied in-memory, per batch, every epoch, straight from
+wherever the manifest paths point — currently live EOS reads. Fine for
+canonical-scale runs (~200k events); becomes the bottleneck if training
+volume scales toward much larger fractions of the ~180 TB `collide-2v`
+corpus.
+
+Reference design (not yet built here): the sibling repo
+[`pploner/foundation_model_testing`](https://github.com/pploner/foundation_model_testing)
+(same `collide-2v` dataset, lxplus/Condor) already solves this for its
+classifier-training use case:
+- Two offline, Condor-distributed stages — **vectorize** (raw parquet →
+  per-class/split `.npy` shards) then **preprocess** (configurable
+  per-feature transform registry + a fit-once/apply-everywhere
+  normalizer, stats persisted to `norm_stats.json`) — see
+  `src/preprocessing/{preprocess,transforms,normalization}.py` and
+  `src/data/vectorize_job.py`.
+- Both stages write to local scratch first (`np.save` to a `tmp_*_dir`)
+  then `shutil.move` to a **durable EOS output dir** — EOS is used
+  because only it has room for the full processed corpus; local
+  `/scratch` is per-pod/ephemeral and far smaller (~3.5 TB total on this
+  NGT pod).
+- Training reads the *persisted, already-vectorized* `.npy` shards via
+  `np.load(..., mmap_mode="r")` (`src/data/datasets.py`) — cheaper than
+  re-parsing raw parquet, but still a read from EOS on every epoch since
+  there's no additional local caching layer on the read side.
+
+Open question flagged by Philip (2026-09-21), not yet resolved: that
+repo's design still hits EOS every epoch to read the persisted
+`.npy` shards. A further improvement worth considering for ORBIT would
+be a **two-tier** scheme — EOS as the durable full-corpus store (as
+above, since only EOS has the space) *plus* a local `/scratch`-resident
+cache of whichever shard(s) are actively being trained on this epoch,
+prefetched/rotated in as training progresses, rather than reading every
+batch from EOS directly. This has not been designed or implemented for
+ORBIT; don't build it speculatively — revisit only once training volume
+actually requires it.
 
 ## Conventions
 
