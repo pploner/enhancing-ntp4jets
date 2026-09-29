@@ -9,7 +9,7 @@ model_kwargs:
     alpha_quantizer: fsq
     branch_loss_weights:
       mu: 0.25
-      alpha: 1.0
+      alpha: 0.0
     vq_mu_num_codes: 64
     fsq_alpha_levels: [32]
     vq_kwargs:

@@ -13,18 +13,61 @@ from gabbro.models.transformer import NormformerStack
 
 
 class FSQ(nn.Module):
-    """Finite scalar quantization with straight-through gradients."""
+    """Finite scalar quantization with straight-through gradients.
 
-    def __init__(self, levels: list[int], loss_use_half_width: bool = False):
+    ``mapping="reference"`` implements the asymmetric bound from the FSQ
+    reference implementation, including its handling of even level counts.
+    ``mapping="legacy"`` preserves the historical Gabbro mapping so existing
+    checkpoints and exported tokens remain reproducible.
+    """
+
+    def __init__(
+        self,
+        levels: list[int],
+        loss_use_half_width: bool = False,
+        mapping: str = "reference",
+    ):
         super().__init__()
         if not levels:
             raise ValueError("FSQ levels must contain at least one entry")
+        if any(
+            not isinstance(level, int) or isinstance(level, bool) or level < 1
+            for level in levels
+        ):
+            raise ValueError(f"FSQ levels must be positive integers, got {levels}")
+        if mapping not in {"reference", "legacy"}:
+            raise ValueError(
+                "FSQ mapping must be either 'reference' or 'legacy', "
+                f"got {mapping!r}"
+            )
         self.register_buffer("levels", torch.tensor(levels, dtype=torch.float32))
         self.num_codes = int(torch.prod(self.levels).item())
         self.feature_size = len(levels)
         self.loss_use_half_width = loss_use_half_width
+        self.mapping = mapping
 
     def forward(self, z: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        if self.mapping == "legacy":
+            return self._forward_legacy(z)
+        return self._forward_reference(z)
+
+    def _strides(self, device: torch.device) -> torch.Tensor:
+        return torch.cumprod(
+            torch.cat(
+                [
+                    torch.ones(1, device=device, dtype=torch.long),
+                    self.levels[:-1].long(),
+                ]
+            ),
+            dim=0,
+        )
+
+    def _combine_per_dim_codes(self, per_dim_codes: torch.Tensor) -> torch.Tensor:
+        return (per_dim_codes * self._strides(per_dim_codes.device)).sum(dim=-1)
+
+    def _forward_legacy(
+        self, z: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         half_width = (self.levels - 1) / 2
         z_bounded = torch.tanh(z)
         z_scaled = z_bounded * half_width
@@ -34,20 +77,52 @@ class FSQ(nn.Module):
         z_decoded = z_bounded + (z_hat - z_bounded).detach()
 
         per_dim_codes = (z_rounded + half_width).long().clamp_min(0)
-        strides = torch.cumprod(
-            torch.cat(
-                [
-                    torch.ones(1, device=z.device, dtype=torch.long),
-                    self.levels[:-1].long(),
-                ]
-            ),
-            dim=0,
-        )
-        codes = (per_dim_codes * strides).sum(dim=-1)
+        codes = self._combine_per_dim_codes(per_dim_codes)
         if self.loss_use_half_width:
             loss_delta = z_scaled - z_rounded.detach()
         else:
             loss_delta = z_bounded - z_hat.detach()
+        loss = loss_delta.pow(2).mean(dim=-1)
+        return z_decoded, codes, loss
+
+    def _forward_reference(
+        self, z: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # This is the asymmetric bounding function used by the paper's
+        # reference implementation. It is necessary for round-to-nearest to
+        # expose exactly L distinct integers when L is even.
+        eps = 1e-3
+        half_l = (self.levels - 1) * (1 - eps) / 2
+        offset = torch.where(
+            self.levels.long() % 2 == 1,
+            torch.zeros_like(self.levels),
+            torch.full_like(self.levels, 0.5),
+        )
+        safe_half_l = torch.where(half_l > 0, half_l, torch.ones_like(half_l))
+        shift = torch.tan(offset / safe_half_l)
+        z_bounded = torch.tanh(z + shift) * half_l - offset
+
+        z_rounded = torch.round(z_bounded)
+        half_width = torch.floor(self.levels / 2)
+        safe_half_width = half_width.clamp(min=1)
+        z_bounded_normalized = z_bounded / safe_half_width
+        z_hat = z_rounded / safe_half_width
+        # Straight-through gradients follow the bounded, normalized FSQ path.
+        z_decoded = z_bounded_normalized + (
+            z_hat - z_bounded_normalized
+        ).detach()
+
+        per_dim_codes = (z_rounded + half_width).long()
+        per_dim_codes = torch.maximum(
+            per_dim_codes, torch.zeros_like(per_dim_codes)
+        )
+        per_dim_codes = torch.minimum(per_dim_codes, self.levels.long() - 1)
+        codes = self._combine_per_dim_codes(per_dim_codes)
+
+        if self.loss_use_half_width:
+            loss_delta = z_bounded - z_rounded.detach()
+        else:
+            loss_delta = z_bounded_normalized - z_hat.detach()
         loss = loss_delta.pow(2).mean(dim=-1)
         return z_decoded, codes, loss
 
@@ -61,7 +136,10 @@ class FSQ(nn.Module):
             residual = torch.div(residual, level, rounding_mode="floor")
 
         per_dim_codes = torch.stack(decoded, dim=-1).to(self.levels.dtype)
-        half_width = (self.levels - 1) / 2
+        if self.mapping == "legacy":
+            half_width = (self.levels - 1) / 2
+        else:
+            half_width = torch.floor(self.levels / 2)
         return (per_dim_codes - half_width) / half_width.clamp(min=1)
 
 
@@ -285,6 +363,10 @@ class SplitQuantizer(nn.Module):
             return FSQ(
                 cfg[f"fsq_{branch}_levels"],
                 loss_use_half_width=bool(cfg.get("fsq_loss_use_half_width", False)),
+                # Saved configs from before the mapping correction do not have
+                # this key. Keep those checkpoints and their tokens on the
+                # exact historical mapping.
+                mapping=cfg.get("fsq_mapping", "legacy"),
             )
         if quantizer_type == "vq":
             vq_kwargs = dict(cfg.get("vq_kwargs", {}))

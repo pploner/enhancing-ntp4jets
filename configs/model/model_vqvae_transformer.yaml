@@ -37,6 +37,8 @@ model_kwargs:
     affine_lr: 2.0
     sync_nu: 1
     replace_freq: 500
+    # Count dead-code timeouts in optimizer updates, not accumulation microbatches.
+    replace_clock: optimizer
     dim: -1
     rotation_tr: False
     rotation_scale_min: null

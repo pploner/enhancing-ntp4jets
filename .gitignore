@@ -184,6 +184,9 @@ Tokenizer/
 
 /wandb/
 
+# EOS file-version directories created when files are replaced in place
+.sys.v#.*/
+
 # HTCondor DAGMan runtime files (keep authored *.dag files tracked)
 *.dag.condor.sub
 *.dag.dagman.out

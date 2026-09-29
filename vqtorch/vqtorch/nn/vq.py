@@ -22,6 +22,7 @@ class VectorQuant(_VQBaseLayer):
 		affine_lr (float): learning rate for affine transform
 		affine_groups (int): number of affine parameter groups
 		replace_freq (int): frequency to replace dead codes
+		replace_clock (str): advance replacement per forward or optimizer step
 		inplace_optimizer (Optimizer): optimizer for inplace codebook updates
 		**kwargs: additional arguments for _VQBaseLayer
 	
@@ -46,6 +47,7 @@ class VectorQuant(_VQBaseLayer):
 		self.rotation_tr = kwargs.pop("rotation_tr", False)
 		self.rotation_scale_min = kwargs.pop("rotation_scale_min", None)
 		self.rotation_scale_max = kwargs.pop("rotation_scale_max", None)
+		replace_clock = kwargs.pop("replace_clock", "forward")
 
 		super().__init__(feature_size, num_codes, **kwargs)
 		self.loss_fn, self.dist_fn = get_dist_fns('euclidean')
@@ -72,7 +74,9 @@ class VectorQuant(_VQBaseLayer):
 										num_groups=affine_groups,
 										)
 		if replace_freq > 0:
-			vqtorch.nn.utils.lru_replacement(self, rho=0.01, timeout=replace_freq)
+			vqtorch.nn.utils.lru_replacement(
+				self, rho=0.01, timeout=replace_freq, clock=replace_clock
+			)
 		return
 
 

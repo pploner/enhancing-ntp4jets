@@ -23,6 +23,8 @@ model_kwargs:
     affine_lr: 0.0
     sync_nu: 2
     replace_freq: 20
+    # Count dead-code timeouts in optimizer updates, not accumulation microbatches.
+    replace_clock: optimizer
     dim: -1
     rotation_tr: False
     rotation_scale_min: null
@@ -39,9 +41,11 @@ model_kwargs:
     quantizer: fsq
     mu_quantizer: null
     alpha_quantizer: null
+    # Standard FSQ has no auxiliary bin-centering loss. PHAEDRA model
+    # configs explicitly opt the morphology (mu) branch into a 0.25 loss.
     branch_loss_weights:
-      mu: 1.0
-      alpha: 1.0
+      mu: 0.0
+      alpha: 0.0
 
     # Phi and Psi are projection adapters around NormFormer stacks. The MLP
     # expansion factor is shared by both directions.
@@ -54,6 +58,10 @@ model_kwargs:
     fsq_mu_levels: [15, 15, 15]
     #fsq_mu_levels: [5, 4, 4, 3, 3, 3, 2, 2]
     fsq_alpha_levels: [1024]
+    # The reference mapping uses an asymmetric bound for even level counts and
+    # guarantees that token decoding reproduces the forward quantized latent.
+    # Old checkpoint configs without this field retain the legacy mapping.
+    fsq_mapping: reference
     # False: loss compares tanh(z) to rounded/normalized FSQ values.
     # True: loss compares tanh(z) * half_width to rounded scalar bins.
     fsq_loss_use_half_width: false
@@ -70,6 +78,8 @@ model_kwargs:
       affine_lr: 0.0
       sync_nu: 0.0
       replace_freq: 0
+      # Used if replacement is enabled by a derived split-VQ config.
+      replace_clock: optimizer
       dim: -1
       rotation_tr: False
       rotation_scale_min: null

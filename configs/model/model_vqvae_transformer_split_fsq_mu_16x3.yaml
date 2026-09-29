@@ -8,6 +8,6 @@ model_kwargs:
     bypass_single_branch_projection: true
     branch_order: ["mu"]
     branch_loss_weights:
-      mu: 0.25
-      alpha: 1.0
+      mu: 0.0
+      alpha: 0.0
     fsq_mu_levels: [16, 16, 16]

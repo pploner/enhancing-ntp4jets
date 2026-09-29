@@ -6,6 +6,6 @@ model_kwargs:
   split_quantizer_cfg:
     branch_loss_weights:
       mu: 0.25
-      alpha: 1.0
+      alpha: 0.0
     fsq_mu_levels: [3, 3, 2, 2]
     fsq_alpha_levels: [32]

@@ -7,7 +7,8 @@ PROJECT_DIR = /eos/user/y/yelberke/enhancing-ntp4jets
 OUTPUT_DIR = /eos/user/y/yelberke/enhancing_ntp4jets_runs
 CONDA_ENV = /eos/home-y/yelberke/conda_condor_orbit_env
 ORBIT_MANIFEST_DIR = /eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final
-GABBRO_ENV_FILE = /eos/user/y/yelberke/wandb.env
+GABBRO_ENV_FILE = /eos/home-y/yelberke/wandb.env
+WANDB_MODE = online
 NUM_WORKERS = 4
 SUITE_ID = $(SUITE_BASE)_$(CANONICAL_EXPERIMENT)_$(Cluster)
 
@@ -22,7 +23,7 @@ arguments = $(PROJECT_DIR) $(OUTPUT_DIR) train $(SUITE_ID) $(Process) \
   test=true \
   data.num_workers=$(NUM_WORKERS)
 
-environment = "ORBIT_MANIFEST_DIR=$(ORBIT_MANIFEST_DIR) GABBRO_ENV_FILE=$(GABBRO_ENV_FILE) CONDA_ENV=$(CONDA_ENV) WANDB_MODE=online $(EXTRA_ENV:)"
+environment = "ORBIT_MANIFEST_DIR=$(ORBIT_MANIFEST_DIR) GABBRO_ENV_FILE=$(GABBRO_ENV_FILE) CONDA_ENV=$(CONDA_ENV) WANDB_MODE=$(WANDB_MODE) $(EXTRA_ENV:)"
 
 log    = $(OUTPUT_DIR)/condor_logs/$(SUITE_BASE)_$(CANONICAL_EXPERIMENT)_$(Cluster).log
 output = $(OUTPUT_DIR)/condor_logs/$(SUITE_BASE)_$(CANONICAL_EXPERIMENT)_$(RUN_NAME)_$(Cluster)_$(Process).out

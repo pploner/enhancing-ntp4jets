@@ -1,0 +1,30 @@
+# @package _global_
+
+# Directly runnable point in the DY-augmented SM VQ-STE learning-rate scan.
+defaults:
+  - /experiment/orbit_campaign_full500_sm_vq4096
+  - _self_
+
+project_name: orbit-vq-ste-4096-sm-dy-alpha-10-lr-1e-3
+task_name: orbit_vq_ste_4096_sm_dy_alpha_10_lr_1e_m3
+tags: [orbit, lr-sweep, SM, DY, particle-full, vq-ste, codes-4096, alpha-10, lr-1e-3]
+train: true
+test: false
+
+data:
+  train_event_budget: 200000
+  val_event_budget: 20000
+
+model:
+  model_kwargs:
+    alpha: 10
+  optimizer:
+    lr: 1e-3
+  scheduler: null
+
+trainer:
+  max_epochs: 30
+
+callbacks:
+  early_stopping:
+    patience: 4

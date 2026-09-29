@@ -7,6 +7,6 @@ model_kwargs:
     branch_order: ["mu", "alpha"]
     branch_loss_weights:
       mu: 0.25
-      alpha: 1.0
+      alpha: 0.0
     fsq_mu_levels: [8, 8]
     fsq_alpha_levels: [8]

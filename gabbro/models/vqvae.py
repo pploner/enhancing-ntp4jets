@@ -15,6 +15,7 @@ import vector
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 from vqtorch.nn import VectorQuant
+from vqtorch.nn.utils import step_lru_replacement
 
 from gabbro.models.latent_sequence import DirectPrefixLatentMasker, LatentSequenceCompressor
 from gabbro.models.quantizers import SplitQuantizer, build_quantizer
@@ -2466,3 +2467,8 @@ class VQVAELightning(L.LightningModule):
             }
 
         return {"optimizer": optimizer}
+
+    def optimizer_step(self, *args, **kwargs) -> None:
+        """Update parameters, then advance VQ replacement exactly once."""
+        super().optimizer_step(*args, **kwargs)
+        step_lru_replacement(self)
