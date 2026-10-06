@@ -1,0 +1,29 @@
+# @package _global_
+
+defaults:
+  - orbit_campaign_full500_tt_vq4096
+  - _self_
+
+project_name: orbit-campaign-5m-full500-tt-vq4096
+task_name: orbit_campaign_full500_tt_vq4096_5m
+tags: [orbit, campaign, 5m, tt, particle-full, vq-ste, codes-4096, alpha-10, lr-1e-4, constant-lr]
+
+data:
+  train_event_budget: 5000000
+  val_event_budget: 1250000
+  # Preserve the natural decay-mode proportions of the full ttbar split.
+  train_event_quotas:
+    tt_hadronic: 1660827
+    tt_leptonic: 1669609
+    tt_semileptonic: 1669564
+  val_event_quotas:
+    tt_hadronic: 416164
+    tt_leptonic: 416943
+    tt_semileptonic: 416893
+
+model:
+  model_kwargs:
+    alpha: 10
+  optimizer:
+    lr: 1e-4
+  scheduler: null

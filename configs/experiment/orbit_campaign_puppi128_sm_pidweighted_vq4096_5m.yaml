@@ -1,0 +1,20 @@
+# @package _global_
+
+defaults:
+  - orbit_campaign_puppi128_sm_pidweighted_vq4096
+  - _self_
+
+project_name: orbit-campaign-5m-puppi128-sm-pidweighted-vq4096
+task_name: orbit_campaign_puppi128_sm_pidweighted_vq4096_5m
+tags: [orbit, campaign, 5m, SM, particle, puppiw-0p05, vq-ste, codes-4096, pid-weighted, alpha-10, lr-1e-4, constant-lr]
+
+data:
+  train_event_budget: 5000000
+  val_event_budget: 1250000
+
+model:
+  model_kwargs:
+    alpha: 10
+  optimizer:
+    lr: 1e-4
+  scheduler: null

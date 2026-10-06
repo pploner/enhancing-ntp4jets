@@ -11,12 +11,11 @@ tags: [orbit, canonical, tt, particle-full, full-event]
 data:
   sequence_type: particle_full
   max_sequence_length: 500
-  batch_size: 16
+  batch_size: 256
 
 model:
   model_kwargs:
     max_sequence_len: 500
 
 trainer:
-  accumulate_grad_batches: 16
-
+  accumulate_grad_batches: 1

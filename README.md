@@ -936,6 +936,8 @@ starting a trial.
 The directly runnable full-statistics eight-model comparison, including the
 standalone-DY SM mixture, is documented in
 [`docs/orbit_full_statistics_campaign.md`](docs/orbit_full_statistics_campaign.md).
+The same document lists parallel `_5m` configs using 5,000,000 training and
+1,250,000 validation events while retaining the original test suites.
 
 Two additive experiment configs define the standard process mixtures without
 replacing any existing experiment:

@@ -9,9 +9,8 @@ task_name: orbit_downstream_event_classifier_full_event
 tags: [orbit, downstream, classifier, five-class, particle-full, full-event]
 
 data:
-  batch_size: 16
+  batch_size: 256
   max_sequence_length: 500
 
 trainer:
-  accumulate_grad_batches: 16
-
+  accumulate_grad_batches: 1

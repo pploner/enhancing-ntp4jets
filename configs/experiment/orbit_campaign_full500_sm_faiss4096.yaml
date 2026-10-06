@@ -19,7 +19,7 @@ model:
   # epochs: 2M particles each from QCD, tt, VJets, VV, and standalone DY.
   fit_max_particles: 10000000
   fit_max_batches: 10000
-  max_test_plot_batches: 625
+  max_test_plot_batches: 40
 
 trainer:
   accumulate_grad_batches: 1

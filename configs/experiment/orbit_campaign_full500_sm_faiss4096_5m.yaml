@@ -1,0 +1,15 @@
+# @package _global_
+
+defaults:
+  - orbit_campaign_full500_sm_faiss4096
+  - _self_
+
+project_name: orbit-campaign-5m-full500-sm-faiss4096
+task_name: orbit_campaign_full500_sm_faiss4096_5m
+tags: [orbit, campaign, 5m, SM, particle-full, faiss, codes-4096]
+
+data:
+  # These event budgets describe the campaign exposure. FAISS still fits its
+  # fixed balanced particle reservoir configured by model.fit_max_particles.
+  train_event_budget: 5000000
+  val_event_budget: 1250000

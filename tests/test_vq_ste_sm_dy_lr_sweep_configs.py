@@ -56,8 +56,8 @@ def test_all_vq_ste_sm_dy_lr_sweep_configs_compose(monkeypatch):
                 assert cfg.data.mask_min_value is None
                 assert cfg.data.train_event_budget == 200_000
                 assert cfg.data.val_event_budget == 20_000
-                assert cfg.data.batch_size == 16
-                assert cfg.trainer.accumulate_grad_batches == 16
+                assert cfg.data.batch_size == 256
+                assert cfg.trainer.accumulate_grad_batches == 1
 
                 groups = {
                     process.group

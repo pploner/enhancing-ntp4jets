@@ -11,7 +11,8 @@ val_event_budget: 12856486
 # The default selection is the unfiltered, leading-500 PUPPI collection.
 sequence_type: particle_full
 max_sequence_length: 500
-batch_size: 16
+# Full effective batches are processed in one forward/backward pass.
+batch_size: 256
 
 process_catalog:
   QCD_HT50tobb: {train_val: "${oc.env:ORBIT_MANIFEST_DIR}/QCD_HT50tobb_train_val.txt", test: "${oc.env:ORBIT_MANIFEST_DIR}/QCD_HT50tobb_test.txt"}

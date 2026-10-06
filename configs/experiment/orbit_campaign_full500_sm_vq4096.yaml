@@ -17,8 +17,8 @@ test: false
 
 model:
   # Bound retained plotting data while metrics continue to stream over the full
-  # test suites. 625 x 16 = 10,000 representative events per suite.
-  max_test_plot_batches: 625
+  # test suites. 40 x 256 = 10,240 representative events per suite.
+  max_test_plot_batches: 40
   model_kwargs:
     input_dim: 4
     max_sequence_len: 500
@@ -29,8 +29,8 @@ model:
 trainer:
   max_epochs: 30
   enable_checkpointing: true
-  # Preserve the established full-event physical/effective batch behavior.
-  accumulate_grad_batches: 16
+  # Keep the 256-event batch physical: no gradient micro-batching.
+  accumulate_grad_batches: 1
 
 callbacks:
   orbit_plotting_callback:
