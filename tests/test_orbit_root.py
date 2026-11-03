@@ -425,6 +425,7 @@ def test_root_configs_compose_and_instantiate(tmp_path):
     assert tt.data.max_sequence_length == 128
     assert tt.data.root.sort_by_pt is True
     assert tt.data.root.split_block_size == 1000
+    assert tt.data.pin_memory is False
     assert tt.model.model_kwargs.alpha == 10
     assert tt.model.optimizer.lr == 1e-4
     assert tt.model.scheduler is None

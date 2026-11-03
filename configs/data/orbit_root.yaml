@@ -15,6 +15,9 @@ defaults:
 sequence_type: particle
 max_sequence_length: 128
 batch_size: 256
+# Pinning capped the loader at ~2k events/s on orbit-run (33k unpinned,
+# 2026-11-03); the unpinned host-to-device copy is ~0.5 MB per batch.
+pin_memory: false
 
 root:
   tree: Events
