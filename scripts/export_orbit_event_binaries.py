@@ -41,6 +41,14 @@ DEFAULT_CLASSES = ("ggHbb", "minbias")
 RAW_FEATURE_SUFFIXES = ("PT", "Eta", "Phi")
 
 
+def _quantizer_shape(cfg) -> tuple[int, int]:
+    """Return ``(per-stage codebook size, number of indices per latent)``."""
+    residual_cfg = cfg.model.model_kwargs.get("residual_quantizer_cfg")
+    if residual_cfg:
+        return int(residual_cfg.codebook_size), int(residual_cfg.num_quantizers)
+    return int(cfg.model.model_kwargs.vq_kwargs.num_codes), 1
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -155,6 +163,7 @@ def _collect_class(
     expected_events: int,
     num_codes: int,
     progress_description: str,
+    num_quantizers: int = 1,
 ):
     originals: list[np.ndarray] = []
     pid_events: list[np.ndarray] = []
@@ -177,10 +186,15 @@ def _collect_class(
                 latent_mask = vq_out.get("latent_mask", particle_mask).bool()
                 if codes.ndim == latent_mask.ndim + 1 and codes.shape[-1] == 1:
                     codes = codes.squeeze(-1)
-                if codes.shape != latent_mask.shape:
+                expected_code_shape = (
+                    (*latent_mask.shape, num_quantizers)
+                    if num_quantizers > 1
+                    else latent_mask.shape
+                )
+                if codes.shape != expected_code_shape:
                     raise ValueError(
-                        "This exporter requires one packed token ID per latent position; "
-                        f"got codes={tuple(codes.shape)}, mask={tuple(latent_mask.shape)}"
+                        "Token tensor does not match the configured residual depth; "
+                        f"got codes={tuple(codes.shape)}, expected={tuple(expected_code_shape)}"
                     )
 
                 features_np = features.detach().cpu().numpy()
@@ -188,7 +202,7 @@ def _collect_class(
                 codes_np = codes.detach().cpu().numpy()
                 latent_mask_np = latent_mask.detach().cpu().numpy().astype(bool)
                 for event_idx in range(features_np.shape[0]):
-                    event_codes = codes_np[event_idx][latent_mask_np[event_idx]]
+                    event_codes = codes_np[event_idx][latent_mask_np[event_idx]].reshape(-1)
                     if np.any(event_codes < 0) or np.any(event_codes >= num_codes):
                         raise ValueError(
                             f"Token IDs must be in [0, {num_codes}); "
@@ -244,7 +258,7 @@ def main() -> None:
         else default_lengths.get(sequence_type, 128)
     )
     batch_size = args.batch_size or (16 if effective_length > 128 else 256)
-    num_codes = int(cfg.model.model_kwargs.vq_kwargs.num_codes)
+    num_codes, num_quantizers = _quantizer_shape(cfg)
     token_dtype = unsigned_dtype_for_size(num_codes)
     device = torch.device(args.device)
     model = _load_model(cfg, checkpoint, device)
@@ -260,6 +274,10 @@ def main() -> None:
         "events_per_class": args.events_per_class,
         "event_filter_disabled": args.disable_event_filter,
         "num_codes": num_codes,
+        "num_quantizers": num_quantizers,
+        "total_token_combinations": num_codes**num_quantizers,
+        "stored_code_vectors": num_codes * num_quantizers,
+        "fixed_bits_per_latent": int(num_codes - 1).bit_length() * num_quantizers,
         "classes": {},
     }
     for class_name in args.classes:
@@ -277,6 +295,7 @@ def main() -> None:
             args.events_per_class,
             num_codes,
             progress_description=f"Exporting {class_name}",
+            num_quantizers=num_quantizers,
         )
         original_path = args.output_dir / f"{class_name}_original_parquet.bin"
         token_path = args.output_dir / f"{class_name}_vq_tokens.bin"
@@ -319,6 +338,11 @@ def main() -> None:
                 **common,
                 "kind": "quantized_token_ids",
                 "num_codes": num_codes,
+                "num_quantizers": num_quantizers,
+                "token_order": "latent-major, then residual stage",
+                "fixed_bits_per_latent": (
+                    int(num_codes - 1).bit_length() * num_quantizers
+                ),
                 "latent_sequence_ratio": float(
                     cfg.model.model_kwargs.get("latent_sequence_cfg", {}).get("ratio", 1.0)
                     if cfg.model.model_kwargs.get("latent_sequence_cfg")

@@ -1,0 +1,29 @@
+executable = /eos/home-y/yelberke/conda_condor_orbit_env/bin/python
+
+PROJECT_DIR = /eos/home-y/yelberke/enhancing-ntp4jets
+RUN_ROOT = /eos/user/y/yelberke/enhancing_ntp4jets_runs
+LOG_DIR = $(RUN_ROOT)/condor_logs
+
+initialdir = $(PROJECT_DIR)
+arguments = scripts/render_orbit_writeup.py model-comparison \
+  --registry campaigns/orbit_campaign_5m_plot_models.yaml \
+  --cache-dir $(RUN_ROOT)/writeup_cache/campaign_5m_comparison \
+  --canonical-manifest $(RUN_ROOT)/comparisons/canonical_tt_full500_vq_ste_training_like_all/manifest.json \
+  --fixed-comparison-dir $(RUN_ROOT)/writeup_plots/comparisons/ttbar_full500_5m_vs_200k \
+  --fixed-puppi128-comparison-dir $(RUN_ROOT)/writeup_plots/comparisons/ttbar_puppi128_5m_vs_200k \
+  --fixed-puppi128-sm-comparison-dir $(RUN_ROOT)/writeup_plots/comparisons/sm_puppi128_5m_vs_200k \
+  --output-dir $(RUN_ROOT)/writeup_plots/model_comparisons_5m
+environment = "PYTHONPATH=$(PROJECT_DIR)/vqtorch:$(PROJECT_DIR)"
+
+log = $(LOG_DIR)/orbit_campaign_5m_comparison_render_$(Cluster).log
+output = $(LOG_DIR)/orbit_campaign_5m_comparison_render_$(Cluster)_$(Process).out
+error = $(LOG_DIR)/orbit_campaign_5m_comparison_render_$(Cluster)_$(Process).err
+
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+request_cpus = 1
+request_memory = 2GB
+request_gpus = 0
++JobFlavour = "espresso"
+
+queue 1

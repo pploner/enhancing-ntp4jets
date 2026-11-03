@@ -1,0 +1,21 @@
+# @package _global_
+
+defaults:
+  - orbit_campaign_full500_sm_vq4096_5m
+  - _self_
+
+project_name: orbit-campaign-5m-full500-sm-rvq3x16
+task_name: orbit_campaign_full500_sm_rvq3x16_5m
+tags: [orbit, campaign, 5m, SM, particle-full, residual-vq, rvq-depth-3, codes-per-stage-16, rate-12bit, lr-1e-4, constant-lr]
+
+model:
+  model_kwargs:
+    # Three independent four-bit indices: 3 * log2(16) = 12 bits per
+    # latent, matching the fixed-width rate of a conventional 4096-code VQ.
+    residual_quantizer_cfg:
+      num_quantizers: 3
+      codebook_size: 16
+      commitment_weight: 1.0
+      ema_decay: 0.8
+      ema_epsilon: 1e-5
+      distance_chunk_size: 1024

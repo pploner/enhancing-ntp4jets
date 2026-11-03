@@ -1,0 +1,16 @@
+# @package _global_
+
+defaults:
+  - orbit_campaign_full500_sm_jettoken_noloss_vq4096_5m
+  - _self_
+
+project_name: orbit-campaign-5m-full500-sm-jettoken-loss-vq4096
+task_name: orbit_campaign_full500_sm_jettoken_loss_vq4096_5m
+tags: [orbit, campaign, 5m, SM, particle-full, vq-ste, codes-4096, alpha-10, lr-1e-4, constant-lr, jet-token-ablation, jet-tokens, jet-loss]
+
+# Particle and jet reconstruction losses are each means over their own valid
+# objects. A weight of one therefore gives the two collection-level objectives
+# equal coefficients, independent of their very different multiplicities.
+model:
+  model_kwargs:
+    jet_reconstruction_loss_weight: 1.0

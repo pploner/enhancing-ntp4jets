@@ -4,7 +4,6 @@ from pathlib import Path
 
 from hydra import compose, initialize_config_dir
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_DIR = REPO_ROOT / "configs"
 EXPERIMENTS = (
@@ -22,6 +21,11 @@ TT_EXPERIMENTS = {
     "orbit_campaign_puppi128_tt_vq4096_5m",
 }
 FAISS_EXPERIMENT = "orbit_campaign_full500_sm_faiss4096_5m"
+JET_TOKEN_EXPERIMENTS = (
+    "orbit_campaign_full500_sm_jettoken_control_vq4096_5m",
+    "orbit_campaign_full500_sm_jettoken_noloss_vq4096_5m",
+    "orbit_campaign_full500_sm_jettoken_loss_vq4096_5m",
+)
 
 
 def test_all_5m_campaign_configs_compose(monkeypatch):
@@ -110,3 +114,43 @@ def test_5m_campaign_preserves_model_and_selection_variants(monkeypatch):
     puppi_pid = configs["orbit_campaign_puppi128_sm_pidweighted_vq4096_5m"]
     assert full_pid.pid.reconstruction_class_weights is not None
     assert puppi_pid.pid.reconstruction_class_weights is not None
+
+
+def test_5m_jet_token_ablation_configs_differ_only_as_intended(monkeypatch):
+    monkeypatch.setenv(
+        "ORBIT_MANIFEST_DIR",
+        str(REPO_ROOT / "manifests" / "production_final"),
+    )
+
+    with initialize_config_dir(config_dir=str(CONFIG_DIR), version_base="1.2"):
+        configs = {
+            experiment: compose(
+                config_name="train.yaml",
+                overrides=[f"experiment={experiment}"],
+            )
+            for experiment in JET_TOKEN_EXPERIMENTS
+        }
+
+    control, no_loss, with_loss = (configs[name] for name in JET_TOKEN_EXPERIMENTS)
+    for experiment, cfg in configs.items():
+        assert cfg.task_name == experiment
+        assert cfg.data.train_event_budget == 5_000_000
+        assert cfg.data.val_event_budget == 1_250_000
+        assert cfg.data.sequence_type == "particle_full"
+        assert cfg.data.max_sequence_length == 500
+        assert cfg.data.max_auxiliary_jets == 5
+        assert cfg.data.batch_size == 256
+        assert cfg.trainer.accumulate_grad_batches == 1
+        assert cfg.model.model_kwargs.max_sequence_len == 505
+        assert cfg.model.model_kwargs.token_type_count == 2
+        assert cfg.model.model_kwargs.vq_kwargs.num_codes == 4096
+        assert cfg.model.model_kwargs.alpha == 10
+        assert cfg.model.optimizer.lr == 1e-4
+        assert cfg.model.scheduler is None
+
+    assert control.data.auxiliary_jet_sequence_type is None
+    assert no_loss.data.auxiliary_jet_sequence_type == "jet_puppi_ak4"
+    assert with_loss.data.auxiliary_jet_sequence_type == "jet_puppi_ak4"
+    assert control.model.model_kwargs.jet_reconstruction_loss_weight == 0
+    assert no_loss.model.model_kwargs.jet_reconstruction_loss_weight == 0
+    assert with_loss.model.model_kwargs.jet_reconstruction_loss_weight == 1

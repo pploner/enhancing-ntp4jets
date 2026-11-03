@@ -1,0 +1,12 @@
+workflow: condor/orbit_campaign_5m_comparison.dag
+registry: campaigns/orbit_campaign_5m_plot_models.yaml
+cache_dir: /eos/user/y/yelberke/enhancing_ntp4jets_runs/writeup_cache/campaign_5m_comparison
+output_dir: /eos/user/y/yelberke/enhancing_ntp4jets_runs/writeup_plots/campaign_5m_comparison
+submitted_at: "2026-10-19T21:00:17+02:00"
+dag_cluster: 1388996
+state: submitted
+expected_cache_pairs: 40
+notes:
+  - Each of eight models produces NPZ and JSON caches for four test suites and tau32.
+  - Completed cache pairs are skipped when a node is retried.
+  - AK4 residual matching is Hungarian assignment without a delta-R cutoff.

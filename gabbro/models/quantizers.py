@@ -5,11 +5,191 @@ from __future__ import annotations
 from typing import Any
 
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 from vqtorch.nn import VectorQuant
 
 from gabbro.models.transformer import NormformerStack
+
+
+class ResidualVectorQuantizer(nn.Module):
+    """Successively quantize latent residuals with independent EMA codebooks.
+
+    Each input vector is represented by ``num_quantizers`` indices, one from
+    each ``codebook_size``-entry codebook. The decoder receives the sum of the
+    selected code vectors. Codebooks are updated from assigned residuals with
+    exponential moving averages; gradients reach the encoder through the
+    straight-through estimate and the per-stage commitment loss.
+    """
+
+    def __init__(
+        self,
+        feature_size: int,
+        num_quantizers: int,
+        codebook_size: int,
+        commitment_weight: float = 1.0,
+        ema_decay: float = 0.8,
+        ema_epsilon: float = 1e-5,
+        distance_chunk_size: int = 1024,
+    ):
+        super().__init__()
+        if feature_size < 1:
+            raise ValueError("feature_size must be positive")
+        if num_quantizers < 1:
+            raise ValueError("num_quantizers must be positive")
+        if codebook_size < 2:
+            raise ValueError("codebook_size must be at least 2")
+        if commitment_weight < 0:
+            raise ValueError("commitment_weight must be non-negative")
+        if not 0 <= ema_decay < 1:
+            raise ValueError("ema_decay must be in [0, 1)")
+        if ema_epsilon <= 0:
+            raise ValueError("ema_epsilon must be positive")
+        if distance_chunk_size < 1:
+            raise ValueError("distance_chunk_size must be positive")
+
+        self.feature_size = int(feature_size)
+        self.num_quantizers = int(num_quantizers)
+        self.codebook_size = int(codebook_size)
+        # ``num_codes`` remains the size of one token vocabulary. Consumers
+        # use ``num_quantizers`` to account for all Q indices.
+        self.num_codes = self.codebook_size
+        self.commitment_weight = float(commitment_weight)
+        self.ema_decay = float(ema_decay)
+        self.ema_epsilon = float(ema_epsilon)
+        self.distance_chunk_size = int(distance_chunk_size)
+
+        codebooks = torch.empty(
+            self.num_quantizers,
+            self.codebook_size,
+            self.feature_size,
+        )
+        nn.init.normal_(codebooks, std=self.feature_size**-0.5)
+        self.register_buffer("codebooks", codebooks)
+        self.register_buffer(
+            "ema_cluster_size",
+            torch.zeros(self.num_quantizers, self.codebook_size),
+        )
+        self.register_buffer("ema_codebook_sum", codebooks.clone())
+
+    def _nearest_codes(
+        self, residual: torch.Tensor, codebook: torch.Tensor
+    ) -> torch.Tensor:
+        indices = []
+        for chunk in residual.split(self.distance_chunk_size, dim=0):
+            # Squared Euclidean distance without materializing an extra
+            # feature dimension: [N, 1] + [1, K] - 2 [N, K].
+            distances = (
+                chunk.float().pow(2).sum(dim=-1, keepdim=True)
+                + codebook.float().pow(2).sum(dim=-1).unsqueeze(0)
+                - 2 * chunk.float() @ codebook.float().transpose(0, 1)
+            )
+            indices.append(distances.argmin(dim=-1))
+        return torch.cat(indices, dim=0)
+
+    @staticmethod
+    def _distributed_sum(value: torch.Tensor) -> torch.Tensor:
+        if dist.is_available() and dist.is_initialized():
+            dist.all_reduce(value, op=dist.ReduceOp.SUM)
+        return value
+
+    @torch.no_grad()
+    def _ema_update(
+        self,
+        stage: int,
+        residual: torch.Tensor,
+        indices: torch.Tensor,
+    ) -> None:
+        counts = torch.bincount(indices, minlength=self.codebook_size).to(
+            dtype=self.ema_cluster_size.dtype
+        )
+        sums = torch.zeros_like(self.ema_codebook_sum[stage])
+        sums.index_add_(0, indices, residual.to(dtype=sums.dtype))
+        self._distributed_sum(counts)
+        self._distributed_sum(sums)
+
+        decay = self.ema_decay
+        self.ema_cluster_size[stage].mul_(decay).add_(counts, alpha=1 - decay)
+        self.ema_codebook_sum[stage].mul_(decay).add_(sums, alpha=1 - decay)
+
+        cluster_size = self.ema_cluster_size[stage]
+        total = cluster_size.sum()
+        smoothed = (
+            (cluster_size + self.ema_epsilon)
+            / (total + self.codebook_size * self.ema_epsilon)
+            * total
+        )
+        self.codebooks[stage].copy_(
+            self.ema_codebook_sum[stage]
+            / smoothed.clamp_min(self.ema_epsilon).unsqueeze(-1)
+        )
+
+    def get_codebook(self) -> torch.Tensor:
+        """Return all codebooks with shape ``[Q, K, D]``."""
+        return self.codebooks
+
+    def decode_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
+        """Decode ``[..., Q]`` indices by summing their stage embeddings."""
+        tokens = tokens.long()
+        if tokens.ndim < 1 or tokens.shape[-1] != self.num_quantizers:
+            raise ValueError(
+                "Residual VQ tokens must end in the configured stage dimension "
+                f"{self.num_quantizers}, got {tuple(tokens.shape)}"
+            )
+        if torch.any(tokens < 0) or torch.any(tokens >= self.codebook_size):
+            raise ValueError("Residual VQ token IDs are outside the codebook range")
+        decoded = torch.zeros(
+            *tokens.shape[:-1],
+            self.feature_size,
+            device=tokens.device,
+            dtype=self.codebooks.dtype,
+        )
+        for stage in range(self.num_quantizers):
+            decoded = decoded + F.embedding(tokens[..., stage], self.codebooks[stage])
+        return decoded
+
+    def forward(self, z: torch.Tensor) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        if z.ndim < 2 or z.shape[-1] != self.feature_size:
+            raise ValueError(
+                f"Expected residual-VQ input ending in {self.feature_size} features, "
+                f"got {tuple(z.shape)}"
+            )
+        input_shape = z.shape
+        z_flat = z.reshape(-1, self.feature_size)
+        quantized_sum = torch.zeros_like(z_flat)
+        stage_indices = []
+        stage_losses = []
+
+        for stage in range(self.num_quantizers):
+            residual = z_flat - quantized_sum
+            indices = self._nearest_codes(residual.detach(), self.codebooks[stage])
+            selected = F.embedding(indices, self.codebooks[stage]).to(dtype=z_flat.dtype)
+            stage_indices.append(indices)
+            stage_losses.append((residual - selected.detach()).pow(2).mean(dim=-1))
+            quantized_sum = quantized_sum + selected
+            # Token-export helpers use ``torch.no_grad`` and must never mutate
+            # the learned dictionaries even if their caller forgot ``eval``.
+            if self.training and torch.is_grad_enabled():
+                self._ema_update(stage, residual.detach(), indices)
+
+        indices = torch.stack(stage_indices, dim=-1).reshape(
+            *input_shape[:-1], self.num_quantizers
+        )
+        stage_loss = torch.stack(stage_losses, dim=-1).reshape(
+            *input_shape[:-1], self.num_quantizers
+        )
+        quantized = quantized_sum.reshape(input_shape)
+        quantized_st = z + (quantized - z).detach()
+        commitment_loss = stage_loss.mean()
+        return quantized_st, {
+            "z": z,
+            "z_q": quantized,
+            "q": indices,
+            "stage_loss": stage_loss,
+            "loss": commitment_loss,
+            "loss_weighted": self.commitment_weight * commitment_loss,
+        }
 
 
 class FSQ(nn.Module):
@@ -486,8 +666,16 @@ def build_quantizer(
     feature_size: int,
     vq_kwargs: dict[str, Any],
     split_quantizer_cfg: dict[str, Any] | None = None,
+    residual_quantizer_cfg: dict[str, Any] | None = None,
 ) -> nn.Module:
-    """Build either the single VectorQuant layer or the split quantizer."""
+    """Build the configured single, residual, or split quantizer."""
+    if residual_quantizer_cfg and split_quantizer_cfg:
+        raise ValueError("Residual and split quantizers cannot be enabled together")
+    if residual_quantizer_cfg:
+        return ResidualVectorQuantizer(
+            feature_size=feature_size,
+            **dict(residual_quantizer_cfg),
+        )
     if not split_quantizer_cfg or split_quantizer_cfg.get("mode", "vq") == "vq":
         return VectorQuant(feature_size=feature_size, **vq_kwargs)
     if split_quantizer_cfg["mode"] == "split":

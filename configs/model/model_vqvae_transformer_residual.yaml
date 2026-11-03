@@ -1,0 +1,18 @@
+defaults:
+  - model_vqvae_transformer
+  - _self_
+
+# Residual VQ: each latent is encoded by Q indices from independent K-entry
+# codebooks, and the decoder receives the sum of their selected embeddings.
+# Override these directly, for example:
+#   model.model_kwargs.residual_quantizer_cfg.num_quantizers=4
+#   model.model_kwargs.residual_quantizer_cfg.codebook_size=256
+model_kwargs:
+  split_quantizer_cfg: null
+  residual_quantizer_cfg:
+    num_quantizers: 3
+    codebook_size: 16
+    commitment_weight: 1.0
+    ema_decay: 0.8
+    ema_epsilon: 1e-5
+    distance_chunk_size: 1024

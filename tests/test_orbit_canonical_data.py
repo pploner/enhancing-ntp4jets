@@ -1,10 +1,12 @@
 """Tests for additive, group-balanced canonical ORBIT experiments."""
 
+import math
 from collections import Counter
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
+import torch
 
 from gabbro.data.orbit_parquet import (
     CanonicalOrbitParquetDataModule,
@@ -109,6 +111,60 @@ def test_parquet_metadata_is_scanned_lazily_until_event_budget(tmp_path, monkeyp
     batches = list(dataset)
     assert sum(batch["part_features"].shape[0] for batch in batches) == 4
     assert opened == [paths[0]]
+
+
+def test_auxiliary_jets_are_pt_sorted_truncated_and_masked(tmp_path):
+    path = tmp_path / "particles_and_jets.parquet"
+    pq.write_table(
+        pa.table(
+            {
+                "L1T_PUPPIPart_Eta": [[0.1, 0.2], [0.3]],
+                "L1T_PUPPIPart_Phi": [[0.0, 1.0], [2.0]],
+                "L1T_PUPPIPart_PT": [[10.0, 20.0], [30.0]],
+                "L1T_PUPPIPart_PuppiW": [[1.0, 1.0], [1.0]],
+                "L1T_JetPuppiAK4_Eta": [
+                    [0.3, -0.9, 0.6, 1.2, -1.5, 1.8],
+                    [0.75, -0.75],
+                ],
+                "L1T_JetPuppiAK4_Phi": [
+                    [0.0, 0.1, 0.2, 0.3, 0.4, 0.5],
+                    [1.0, -1.0],
+                ],
+                "L1T_JetPuppiAK4_PT": [
+                    [10.0, 60.0, 20.0, 50.0, 30.0, 40.0],
+                    [15.0, 25.0],
+                ],
+            }
+        ),
+        path,
+    )
+
+    batch = next(
+        iter(
+            OrbitParquetDataset(
+                [path],
+                sequence_type="particle_full",
+                max_sequence_length=3,
+                batch_size=2,
+                auxiliary_jet_sequence_type="jet_puppi_ak4",
+                max_auxiliary_jets=5,
+            )
+        )
+    )
+
+    assert batch["part_features"].shape == (2, 3, 4)
+    assert batch["jet_features"].shape == (2, 5, 4)
+    assert batch["jet_mask"].tolist() == [
+        [True, True, True, True, True],
+        [True, True, False, False, False],
+    ]
+    expected_pt = torch.tensor([math.log(pt) - 1.8 for pt in [60, 50, 40, 30, 20]])
+    assert torch.allclose(batch["jet_features"][0, :, 3], expected_pt)
+    assert torch.allclose(
+        batch["jet_features"][0, :, 0],
+        torch.tensor([-0.3, 0.4, 0.6, -0.5, 0.2]),
+    )
+    assert torch.count_nonzero(batch["jet_features"][1, 2:]) == 0
 
 
 def test_canonical_module_emits_exact_quotas_and_named_test_suites(tmp_path):

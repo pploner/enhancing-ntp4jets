@@ -1,0 +1,14 @@
+# @package _global_
+
+defaults:
+  - orbit_campaign_full500_sm_vq4096_5m
+  - override /data: orbit_full_statistics_leptonic.yaml
+  - _self_
+
+project_name: orbit-campaign-5m-full500-leptonic-vq4096
+task_name: orbit_campaign_full500_leptonic_vq4096_5m
+tags: [orbit, campaign, 5m, leptonic, particle-full, vq-ste, codes-4096, alpha-10, lr-1e-4, constant-lr]
+
+data:
+  train_event_budget: 5000000
+  val_event_budget: 1250000

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import bisect
 import csv
 import json
@@ -58,6 +59,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pyarrow.parquet as pq
 import torch
+import yaml
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from scipy.optimize import curve_fit
@@ -95,6 +97,16 @@ def parse_args():
         action="append",
         metavar="RUN_SPEC",
         help="Repeatable comparison entry: --run RUN_DIR or --run RUN_DIR LABEL.",
+    )
+    source.add_argument(
+        "--config",
+        type=Path,
+        help="Resolved Hydra config or exported W&B config for an explicit checkpoint.",
+    )
+    parser.add_argument(
+        "--checkpoint",
+        type=Path,
+        help="Checkpoint paired with --config (for models without a local run directory).",
     )
     parser.add_argument(
         "--z-test-manifest",
@@ -160,6 +172,8 @@ def parse_named_runs(run_specs):
 def run_specs(args):
     if args.run_dir is not None:
         return [(args.run_dir.resolve(), args.run_dir.resolve().name)], False
+    if args.config is not None:
+        return [(args.config.resolve().parent, args.checkpoint.stem)], False
     return parse_named_runs(args.run), True
 
 
@@ -170,14 +184,39 @@ def output_component(label: str) -> str:
     return value
 
 
-def load_model(run_dir: Path, device: torch.device):
-    config_path = run_dir / "config_resolved.yaml"
-    if not config_path.is_file():
+def load_config(config_path: Path):
+    """Load either a native Hydra config or a W&B-exported config."""
+    payload = yaml.safe_load(config_path.read_text())
+    if isinstance(payload.get("data"), dict) and "value" in payload["data"]:
+        unwrapped = {}
+        for key, entry in payload.items():
+            value = entry.get("value") if isinstance(entry, dict) and "value" in entry else entry
+            if isinstance(value, str) and value.lstrip().startswith(("{", "[")):
+                try:
+                    value = ast.literal_eval(value)
+                except (SyntaxError, ValueError):
+                    pass
+            unwrapped[key] = value
+        payload = unwrapped
+    if "pid" not in payload and "pid_cfg" in payload:
+        payload["pid"] = payload["pid_cfg"]
+    return OmegaConf.create(payload)
+
+
+def load_model(
+    run_dir: Path,
+    device: torch.device,
+    *,
+    explicit_config: Path | None = None,
+    explicit_checkpoint: Path | None = None,
+):
+    config_path = explicit_config or run_dir / "config_resolved.yaml"
+    if explicit_config is None and not config_path.is_file():
         config_path = run_dir / ".hydra" / "config.yaml"
-    checkpoint = run_dir / "checkpoints" / "best.ckpt"
+    checkpoint = explicit_checkpoint or run_dir / "checkpoints" / "best.ckpt"
     if not config_path.is_file():
         raise FileNotFoundError(f"No resolved or Hydra config found under {run_dir}")
-    cfg = OmegaConf.load(config_path)
+    cfg = load_config(config_path)
     if not bool(cfg.get("pid", {}).get("enabled", False)):
         raise ValueError("Z→μ⁺μ⁻ evaluation requires a PID-enabled checkpoint")
     model = instantiate(cfg.model)
@@ -753,7 +792,12 @@ def candidate_row(prefix: str, candidate):
 
 def evaluate_run(args, run_dir: Path, output_dir: Path):
     device = torch.device(args.device)
-    model, cfg, checkpoint = load_model(run_dir, device)
+    model, cfg, checkpoint = load_model(
+        run_dir,
+        device,
+        explicit_config=args.config,
+        explicit_checkpoint=args.checkpoint,
+    )
     sequence_type, max_sequence_length, mask_column, mask_min_value = checkpoint_data_settings(cfg)
     include_energy, energy_shift = checkpoint_energy_settings(cfg)
     batch_size = args.batch_size or (16 if max_sequence_length > 128 else 256)
@@ -774,6 +818,14 @@ def evaluate_run(args, run_dir: Path, output_dir: Path):
 
     truth_reader = TruthReader() if args.candidate_mode == "truth" else None
     rows = []
+    muon_features = {
+        "all_original": [],
+        "all_decoded": [],
+        "all_pid": [],
+        "z_candidates_original": [],
+        "z_candidates_decoded": [],
+        "z_candidates_pid": [],
+    }
     with tqdm(total=args.events, desc="Evaluating Z→μ⁺μ⁻", unit="event") as progress:
         for batch in dataset:
             decoded, decoded_pid = decode_batch(model, batch, device)
@@ -791,6 +843,11 @@ def evaluate_run(args, run_dir: Path, output_dir: Path):
                 original_pid_event = original_pid[index, valid][:particle_count]
                 decoded_event = decoded[index, valid][:particle_count]
                 decoded_pid_event = decoded_pid[index, valid][:particle_count]
+                original_muons = np.isin(original_pid_event, (MUON_PID, ANTIMUON_PID))
+                if np.any(original_muons):
+                    muon_features["all_original"].append(original[original_muons])
+                    muon_features["all_decoded"].append(decoded_event[original_muons])
+                    muon_features["all_pid"].append(original_pid_event[original_muons])
                 row = {"source_file": source_file, "source_row": source_row}
                 if args.candidate_mode == "truth":
                     truth = decaying_z_to_mumu(truth_reader.row(source_file, source_row))
@@ -836,6 +893,20 @@ def evaluate_run(args, run_dir: Path, output_dir: Path):
                     )
                 row.update(candidate_row("original", original_candidate))
                 row.update(candidate_row("decoded", decoded_candidate))
+                if original_candidate is not None and decoded_candidate is not None:
+                    muon_features["z_candidates_original"].append(
+                        np.stack(
+                            (original_candidate["muon"], original_candidate["antimuon"])
+                        )
+                    )
+                    muon_features["z_candidates_decoded"].append(
+                        np.stack(
+                            (decoded_candidate["muon"], decoded_candidate["antimuon"])
+                        )
+                    )
+                    muon_features["z_candidates_pid"].append(
+                        np.asarray((MUON_PID, ANTIMUON_PID), dtype=np.int8)
+                    )
                 rows.append(row)
                 progress.update(1)
                 if len(rows) == args.events:
@@ -850,6 +921,15 @@ def evaluate_run(args, run_dir: Path, output_dir: Path):
         writer = csv.DictWriter(output, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
+    compact_muons = {}
+    for name, chunks in muon_features.items():
+        width = 1 if name.endswith("_pid") else 3
+        compact_muons[name] = (
+            np.concatenate(chunks).astype(np.int8 if width == 1 else np.float32)
+            if chunks
+            else np.empty((0,) if width == 1 else (0, width), dtype=np.int8 if width == 1 else np.float32)
+        )
+    np.savez_compressed(output_dir / "z_mumu_muon_features.npz", **compact_muons)
     summary = {
         "checkpoint": str(checkpoint) if checkpoint is not None else None,
         "events": args.events,
@@ -881,6 +961,10 @@ def evaluate_run(args, run_dir: Path, output_dir: Path):
 
 def main():
     args = parse_args()
+    if (args.config is None) != (args.checkpoint is None):
+        raise ValueError("--config and --checkpoint must be provided together")
+    if args.checkpoint is not None and not args.checkpoint.is_file():
+        raise FileNotFoundError(args.checkpoint)
     if args.events < 1:
         raise ValueError("--events must be positive")
     if args.apply_current_cuts:

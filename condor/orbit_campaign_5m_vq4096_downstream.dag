@@ -1,0 +1,22 @@
+JOB HIGGS orbit_campaign_5m_vq4096_downstream_cache.sub
+VARS HIGGS MODE="higgs" JOB_FLAVOUR="longlunch"
+RETRY HIGGS 1
+
+JOB TAU32 orbit_campaign_5m_vq4096_downstream_cache.sub
+VARS TAU32 MODE="tau32" JOB_FLAVOUR="workday"
+RETRY TAU32 1
+
+JOB JETS orbit_campaign_5m_vq4096_downstream_cache.sub
+VARS JETS MODE="jets" JOB_FLAVOUR="workday"
+RETRY JETS 1
+
+JOB PID orbit_campaign_5m_vq4096_downstream_cache.sub
+VARS PID MODE="pid" JOB_FLAVOUR="longlunch"
+RETRY PID 1
+
+JOB MET orbit_campaign_5m_vq4096_downstream_cache.sub
+VARS MET MODE="met" JOB_FLAVOUR="longlunch"
+RETRY MET 1
+
+JOB RENDER orbit_campaign_5m_vq4096_downstream_render.sub
+PARENT HIGGS TAU32 JETS PID MET CHILD RENDER

@@ -1,0 +1,73 @@
+models:
+  - id: full500_tt_vq4096
+    label: ttbar training, 4096 codes
+    gimmick: ttbar training
+    selection: full500
+    quantizer: VQ-STE
+    codes: 4096
+    config: /eos/user/y/yelberke/enhancing_ntp4jets_runs/orbit_campaign_5m_wandb_test_imports/orbit_campaign_full500_tt_vq4096_5m/ttbar_v0pvksvj/config.yaml
+    checkpoint: /eos/user/y/yelberke/enhancing_ntp4jets_runs/plotting_ckpts/full500-tt-vq4096
+    pid_confusion_dir: /eos/user/y/yelberke/enhancing_ntp4jets_runs/plotting_ckpts/full500-tt-vq4096-evaluation
+  - id: full500_sm_vq4096
+    label: SM-mixture training, 4096 codes
+    gimmick: SM training
+    selection: full500
+    quantizer: VQ-STE
+    codes: 4096
+    config: /eos/user/y/yelberke/enhancing_ntp4jets_runs/orbit_campaign_5m_wandb_test_imports/orbit_campaign_full500_sm_vq4096_5m/ttbar_k1ys4qni/config.yaml
+    checkpoint: /eos/user/y/yelberke/enhancing_ntp4jets_runs/plotting_ckpts/full500-sm-vq4096
+    pid_confusion_dir: /eos/user/y/yelberke/enhancing_ntp4jets_runs/plotting_ckpts/full500-sm-vq4096-evaluation
+  - id: full500_sm_pidweighted_vq4096
+    label: SM-mixture training, PID-weighted loss
+    gimmick: PID-weighted loss
+    selection: full500
+    quantizer: VQ-STE
+    codes: 4096
+    pid_weighted: true
+    config: /eos/user/y/yelberke/enhancing_ntp4jets_runs/orbit_campaign_5m_wandb_test_imports/orbit_campaign_full500_sm_pidweighted_vq4096_5m/ttbar_pk9khw9a/config.yaml
+    checkpoint: /eos/user/y/yelberke/enhancing_ntp4jets_runs/plotting_ckpts/full500-sm-pidweighted-vq4096
+    pid_confusion_dir: /eos/user/y/yelberke/enhancing_ntp4jets_runs/plotting_ckpts/full500-sm-pidweighted-vq4096-evaluation
+  - id: puppi128_sm_vq4096
+    label: SM-mixture training, 4096 codes
+    gimmick: SM training, PUPPI 128
+    selection: puppi128
+    quantizer: VQ-STE
+    codes: 4096
+    config: /eos/user/y/yelberke/enhancing_ntp4jets_runs/orbit_campaign_5m_wandb_test_imports/orbit_campaign_puppi128_sm_vq4096_5m/ttbar_7pmijlrh/config.yaml
+    checkpoint: /eos/user/y/yelberke/enhancing_ntp4jets_runs/plotting_ckpts/best-5m-puppi128-sm-vq4096.ckpt
+    pid_confusion_dir: /eos/user/y/yelberke/enhancing_ntp4jets_runs/writeup_cache/campaign_5m_comparison/pid_confusion_sources/puppi128_sm_vq4096
+  - id: puppi128_tt_vq4096
+    label: ttbar training, 4096 codes
+    gimmick: ttbar training, PUPPI 128
+    selection: puppi128
+    quantizer: VQ-STE
+    codes: 4096
+    config: /eos/user/y/yelberke/enhancing_ntp4jets_runs/orbit_campaign_5m_wandb_test_imports/orbit_campaign_puppi128_tt_vq4096_5m/ttbar_tyciyoy7/config.yaml
+    checkpoint: /eos/user/y/yelberke/enhancing_ntp4jets_runs/plotting_ckpts/best–5m-puppi128-tt-vq4096.ckpt
+    pid_confusion_dir: /eos/user/y/yelberke/enhancing_ntp4jets_runs/writeup_cache/campaign_5m_comparison/pid_confusion_sources/puppi128_tt_vq4096
+  - id: puppi128_sm_pidweighted_vq4096
+    label: SM-mixture training, PID-weighted loss
+    gimmick: PID-weighted loss, PUPPI 128
+    selection: puppi128
+    quantizer: VQ-STE
+    codes: 4096
+    pid_weighted: true
+    config: /eos/user/y/yelberke/enhancing_ntp4jets_runs/orbit_campaign_5m_wandb_test_imports/orbit_campaign_puppi128_sm_pidweighted_vq4096_5m/ttbar_hzqx5xvp/config.yaml
+    checkpoint: /eos/user/y/yelberke/enhancing_ntp4jets_runs/plotting_ckpts/best-5m-puppi128-sm-pidweighted-vq4096.ckpt
+    pid_confusion_dir: /eos/user/y/yelberke/enhancing_ntp4jets_runs/writeup_cache/campaign_5m_comparison/pid_confusion_sources/puppi128_sm_pidweighted_vq4096
+  - id: full500_sm_vq8192
+    label: SM-mixture training, 8192 codes
+    gimmick: 8192 codes
+    selection: full500
+    quantizer: VQ-STE
+    codes: 8192
+    config: /eos/user/y/yelberke/enhancing_ntp4jets_runs/orbit_campaign_5m_jobs_7_8_1234622/orbit-campaign-5m-full500-sm-vq8192/runs/2026-10-05_21-17-30_b9g57n0022_SelectiveTinning/config_resolved.yaml
+    checkpoint: /eos/user/y/yelberke/enhancing_ntp4jets_runs/orbit_campaign_5m_jobs_7_8_1234622/orbit-campaign-5m-full500-sm-vq8192/runs/2026-10-05_21-17-30_b9g57n0022_SelectiveTinning/checkpoints/best.ckpt
+  - id: full500_sm_faiss4096
+    label: SM-mixture FAISS, 4096 clusters
+    gimmick: balanced-fit FAISS
+    selection: full500
+    quantizer: FAISS k-means
+    codes: 4096
+    config: /eos/user/y/yelberke/enhancing_ntp4jets_runs/orbit_campaign_5m_jobs_7_8_evaluation_1383571/orbit-campaign-5m-full500-sm-faiss4096/runs/2026-10-18_22-00-29_b9pgpun203_HomelyCarapace/.hydra/config.yaml
+    codebook: /eos/user/y/yelberke/enhancing_ntp4jets_runs/orbit_campaign_5m_jobs_7_8_1234622/orbit-campaign-5m-full500-sm-faiss4096/runs/2026-10-05_23-27-00_b9pgpun501_ShortBuffer/evaluation/current/artifacts/faiss_kmeans_centroids.npz

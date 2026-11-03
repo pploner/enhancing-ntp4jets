@@ -1,0 +1,51 @@
+# Complete configuration for `scripts/render_orbit_writeup.py all`.
+# Export the referenced environment variables or replace them with paths.
+
+training_scale:
+  - canonical_manifest: ${TT_FULL500_200K_MANIFEST}
+    campaign_residual_cache: ${TT_FULL500_5M_RESIDUAL_CACHE}
+    campaign_4096_metrics: ${TT_FULL500_5M_METRICS}
+    campaign_4096_config: ${TT_FULL500_5M_CONFIG}
+    output_dir: ${WRITEUP_DIR}/comparisons/ttbar_full500_5m_vs_200k
+    selection: full500
+    training_domain: tt
+  - canonical_manifest: ${TT_PUPPI128_200K_MANIFEST}
+    campaign_residual_cache: ${TT_PUPPI128_5M_RESIDUAL_CACHE}
+    campaign_4096_metrics: ${TT_PUPPI128_5M_METRICS}
+    campaign_4096_config: ${TT_PUPPI128_5M_CONFIG}
+    output_dir: ${WRITEUP_DIR}/comparisons/ttbar_puppi128_5m_vs_200k
+    selection: puppi128
+    training_domain: tt
+  - canonical_manifest: ${SM_PUPPI128_200K_MANIFEST}
+    campaign_residual_cache: ${SM_PUPPI128_5M_RESIDUAL_CACHE}
+    campaign_4096_metrics: ${SM_PUPPI128_5M_METRICS}
+    campaign_4096_config: ${SM_PUPPI128_5M_CONFIG}
+    output_dir: ${WRITEUP_DIR}/comparisons/sm_puppi128_5m_vs_200k
+    selection: puppi128
+    training_domain: sm
+
+summary:
+  golden_manifest: ${GOLDEN_MANIFEST}
+  campaign_summary_root:
+    - ${CAMPAIGN_WANDB_MIRROR}
+    - ${CAMPAIGN_7_8_RUN_ROOT}
+  downstream_run_dir: ${SM_VQ4096_RUN}
+  golden_pid_confusion: ${GOLDEN_PID_CACHE}
+  golden_pid_residuals: ${GOLDEN_PID_CACHE}
+  higgs_cache: ${WRITEUP_CACHE_DIR}/higgs/higgs_candidates.csv
+  tau32_cache: ${WRITEUP_CACHE_DIR}/tau32/tt_hadronic_ak8_pt450_tau32_values.npz
+  met_cache: ${WRITEUP_CACHE_DIR}/met/sm_mixture_met_histograms.npz
+  met_run_dir: ${SM_VQ8192_RUN}
+  jet_residual_cache: ${WRITEUP_CACHE_DIR}/jets/sm_mixture_jet_residuals.npz
+  sm_pid_residuals: ${WRITEUP_CACHE_DIR}/sm_pid/pid_conditional_pull_values.npz
+  comparison_dir: ${WRITEUP_DIR}/comparisons/ttbar_full500_5m_vs_200k
+  output_dir: ${WRITEUP_DIR}
+
+model_comparison:
+  registry: campaigns/orbit_campaign_5m_plot_models.yaml
+  cache_dir: ${LOG_DIR}/writeup_cache/campaign_5m_comparison
+  canonical_manifest: ${TT_FULL500_200K_MANIFEST}
+  fixed_comparison_dir: ${WRITEUP_DIR}/comparisons/ttbar_full500_5m_vs_200k
+  fixed_puppi128_comparison_dir: ${WRITEUP_DIR}/comparisons/ttbar_puppi128_5m_vs_200k
+  fixed_puppi128_sm_comparison_dir: ${WRITEUP_DIR}/comparisons/sm_puppi128_5m_vs_200k
+  output_dir: ${WRITEUP_DIR}/model_comparisons_5m

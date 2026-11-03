@@ -345,6 +345,7 @@ MINBIAS_PHYSICAL_FEATURE_RANGES = {
 ENERGY_RANGE = (0.0, 2_500.0)
 ENERGY_RESIDUAL_RANGE = (-50.0, 50.0)
 MISSING_ET_RANGE = (0.0, 1_000.0)
+MISSING_ET_RESIDUAL_RANGE = (-200.0, 200.0)
 JET_MASS_RANGE = (0.0, 1_800.0)
 JET_MASS_RESIDUAL_RANGE = (-50.0, 50.0)
 TAU32_RESIDUAL_RANGE = (-0.4, 0.4)
@@ -537,16 +538,32 @@ def code_entropy_metrics(
     input_mask: np.ndarray,
     num_codes: int | None,
     branch_specs: tuple[CodeBranchSpec, ...] = (),
+    num_quantizers: int = 1,
 ) -> dict[str, float | int | None]:
     """Compute sparse marginal entropy and length-aware rate metrics."""
     codes = np.asarray(code_idx)
     latent_mask = np.asarray(code_mask, dtype=bool)
     particle_mask = np.asarray(input_mask, dtype=bool)
+    if num_quantizers < 1:
+        raise ValueError("num_quantizers must be positive")
     if codes.ndim == latent_mask.ndim + 1 and codes.shape[-1] == 1:
         codes = codes[..., 0]
-    if codes.shape != latent_mask.shape:
+    is_multistage = codes.ndim == latent_mask.ndim + 1
+    if is_multistage and codes.shape[-1] != num_quantizers:
+        raise ValueError(
+            "code_idx stage dimension must match num_quantizers, got "
+            f"{codes.shape[-1]} and {num_quantizers}"
+        )
+    expected_shape = codes.shape[:-1] if is_multistage else codes.shape
+    if expected_shape != latent_mask.shape:
         raise ValueError(
             f"code_idx and code_mask must match, got {codes.shape} and {latent_mask.shape}"
+        )
+    if num_quantizers != (codes.shape[-1] if is_multistage else 1):
+        raise ValueError(
+            "num_quantizers does not match the token tensor: "
+            f"configured {num_quantizers}, inferred "
+            f"{codes.shape[-1] if is_multistage else 1}"
         )
     if particle_mask.ndim != 2 or particle_mask.shape[0] != latent_mask.shape[0]:
         raise ValueError("input_mask must have one row per event")
@@ -556,7 +573,22 @@ def code_entropy_metrics(
         raise ValueError("Valid token IDs must be non-negative")
     if num_codes is not None and np.any(valid_codes >= int(num_codes)):
         raise ValueError("Valid token IDs must be smaller than num_codes")
-    entropy, active_codes = _empirical_entropy_bits(valid_codes)
+    if is_multistage:
+        stage_entropies = []
+        stage_active_codes = []
+        for stage in range(num_quantizers):
+            stage_entropy, stage_active = _empirical_entropy_bits(valid_codes[:, stage])
+            stage_entropies.append(stage_entropy)
+            stage_active_codes.append(stage_active)
+        # Stages are stored as separate token streams. Their marginal rates
+        # therefore add; flattening all stage IDs into one distribution would
+        # incorrectly charge only one index per input element.
+        entropy = float(sum(stage_entropies))
+        active_codes = int(sum(stage_active_codes))
+    else:
+        entropy, active_codes = _empirical_entropy_bits(valid_codes)
+        stage_entropies = [entropy]
+        stage_active_codes = [active_codes]
     n_events = int(latent_mask.shape[0])
     n_latent_tokens = int(latent_mask.sum())
     n_input_particles = int(particle_mask.sum())
@@ -570,13 +602,18 @@ def code_entropy_metrics(
     utilization = None
     total_codebook_size = None
     if num_codes is not None:
-        total_codebook_size = int(num_codes)
-        if total_codebook_size < 1:
+        per_stage_codebook_size = int(num_codes)
+        if per_stage_codebook_size < 1:
             raise ValueError("num_codes must be positive")
-        fixed_bits_per_token = int(total_codebook_size - 1).bit_length()
-        utilization = active_codes / total_codebook_size
-        if total_codebook_size > 1:
-            normalized_entropy = entropy / math.log2(total_codebook_size)
+        total_codebook_size = per_stage_codebook_size**num_quantizers
+        fixed_bits_per_token = (
+            int(per_stage_codebook_size - 1).bit_length() * num_quantizers
+        )
+        utilization = active_codes / (per_stage_codebook_size * num_quantizers)
+        if per_stage_codebook_size > 1:
+            normalized_entropy = entropy / (
+                num_quantizers * math.log2(per_stage_codebook_size)
+            )
         if fixed_bits_per_token > 0:
             fraction_of_fixed_width = entropy / fixed_bits_per_token
 
@@ -607,10 +644,28 @@ def code_entropy_metrics(
         "metrics/rate/sample_events": n_events,
         "metrics/rate/sample_latent_tokens": n_latent_tokens,
         "metrics/rate/sample_input_particles": n_input_particles,
+        "metrics/rate/num_indices_per_latent_token": num_quantizers,
+        "metrics/codebook/num_quantizers": num_quantizers,
+        "metrics/codebook/per_stage_size": num_codes,
+        "metrics/codebook/stored_vectors": (
+            None if num_codes is None else int(num_codes) * num_quantizers
+        ),
     }
+
+    if is_multistage:
+        for stage, (stage_entropy, stage_active) in enumerate(
+            zip(stage_entropies, stage_active_codes)
+        ):
+            metrics[f"metrics/entropy/stage_{stage}/bits_per_token"] = stage_entropy
+            metrics[f"metrics/active_codes/stage_{stage}"] = stage_active
+            metrics[f"metrics/utilization/stage_{stage}"] = (
+                None if num_codes is None else stage_active / int(num_codes)
+            )
 
     if not branch_specs or valid_codes.size == 0:
         return metrics
+    if is_multistage:
+        raise ValueError("branch_specs cannot be combined with multi-stage residual tokens")
 
     represented_codes = math.prod(spec.num_codes for spec in branch_specs)
     if num_codes is not None and represented_codes != int(num_codes):
@@ -1219,6 +1274,12 @@ def collect_physical_reconstruction_histograms(
             missing_et_bins,
         )
         histograms["missing_et_bins"] = missing_et_bins
+        missing_et_diff_bins = _linear_bins(MISSING_ET_RESIDUAL_RANGE, 50)
+        histograms["missing_et_diff_counts"] = _safe_density_hist(
+            reco_missing_ets - true_missing_ets,
+            missing_et_diff_bins,
+        )
+        histograms["missing_et_diff_bins"] = missing_et_diff_bins
 
     if data_level == "particle" and len(true_jet_masses) > 0:
         true_jet_masses = np.asarray(true_jet_masses)
@@ -1758,7 +1819,13 @@ def physical_reconstruction_plots(
 
 def plot_codebook_histogram(code_idx: np.ndarray, num_codes: int | None = None):
     plot_utils.set_mpl_style()
-    codes = np.asarray(code_idx).reshape(-1)
+    raw_codes = np.asarray(code_idx)
+    stage_codes = (
+        raw_codes.reshape(-1, raw_codes.shape[-1])
+        if raw_codes.ndim == 2 and raw_codes.shape[-1] > 1
+        else raw_codes.reshape(-1, 1)
+    )
+    codes = stage_codes.reshape(-1)
     codes = codes[np.isfinite(codes)]
     fig, ax = plt.subplots(figsize=(8, 5))
     xlabel = "Token ID"
@@ -1773,7 +1840,17 @@ def plot_codebook_histogram(code_idx: np.ndarray, num_codes: int | None = None):
         )
         if dense_safe:
             bins = np.arange(int(unique_codes.max()) + 2) - 0.5
-            ax.hist(codes, bins=bins, color=RECONSTRUCTED_COLOR, histtype="step")
+            for stage in range(stage_codes.shape[-1]):
+                values = stage_codes[:, stage]
+                values = values[np.isfinite(values)]
+                ax.hist(
+                    values,
+                    bins=bins,
+                    histtype="step",
+                    label=(f"Stage {stage + 1}" if stage_codes.shape[-1] > 1 else None),
+                )
+            if stage_codes.shape[-1] > 1:
+                ax.legend()
         else:
             order = np.argsort(counts)[::-1]
             max_bars = 100
@@ -1788,9 +1865,20 @@ def plot_codebook_histogram(code_idx: np.ndarray, num_codes: int | None = None):
             xlabel = f"Active token ID, top {len(selected)} by count"
     ax.set_xlabel(xlabel)
     ax.set_ylabel("Count")
-    utilization_denominator = num_codes or max(len(np.unique(codes)), 1)
-    utilization = len(np.unique(codes)) / utilization_denominator
-    _set_title(ax, f"Codebook utilization: {utilization:.3f}")
+    if num_codes is None:
+        utilization = 1.0
+    else:
+        stage_utilizations = [
+            len(np.unique(stage_codes[:, stage])) / num_codes
+            for stage in range(stage_codes.shape[-1])
+        ]
+        utilization = float(np.mean(stage_utilizations))
+    qualifier = (
+        "Mean codebook utilization"
+        if stage_codes.shape[-1] > 1
+        else "Codebook utilization"
+    )
+    _set_title(ax, f"{qualifier}: {utilization:.3f}")
     fig.tight_layout()
     return fig
 

@@ -74,6 +74,34 @@ top-level balancing. The FAISS variant remains deliberately different: its
 centroids are fitted on the same balanced 10-million-particle reservoir as the
 full-statistics FAISS run, rather than on five million training events.
 
+## Stored-jet-token ablation
+
+Three additional 5M-event configs test whether explicit reconstructed-jet
+context helps compression of the particle collection. All three use the same
+balanced five-class SM mixture, full leading-500 particle representation,
+VQ-STE tokenizer with 4096 codes, physical batch size 256, constant learning
+rate `1e-4`, and reconstruction coefficient `alpha: 10`:
+
+1. `orbit_campaign_full500_sm_jettoken_control_vq4096_5m`: particles only,
+   but with the same two token-type embeddings and 505-position capacity as
+   the jet-token variants.
+2. `orbit_campaign_full500_sm_jettoken_noloss_vq4096_5m`: appends up to five
+   leading-pT stored `L1T_JetPuppiAK4` jets. Jet tokens participate in attention
+   and quantization, but their direct reconstruction-loss weight is zero.
+3. `orbit_campaign_full500_sm_jettoken_loss_vq4096_5m`: the same input, with a
+   unit-weight direct jet reconstruction loss.
+
+The jet tokens use the particle transformations `(eta/3, cos(phi), sin(phi),
+log(pT)-1.8)` and a learned token-type embedding. Particle and jet losses are
+means over their respective valid objects, so the jet term is not diluted by
+the much larger particle collection. All valid particle and jet tokens count
+toward quantizer/rate metrics. Standard particle and downstream physics plots
+continue to use decoded particles only; separate stored-jet feature and
+residual plots expose the auxiliary reconstruction directly.
+
+The Condor definition is `condor/orbit_campaign_5m_jet_token_ablation.sub` and
+submits exactly these three training jobs with `nextweek` flavour.
+
 ## Implemented model matrix
 
 1. `orbit_campaign_full500_tt_vq4096`: VQ-STE, 4096 codes, leading-500

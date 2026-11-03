@@ -1,0 +1,48 @@
+# Independent test suites for the fitted/trained 5M campaign jobs 7 and 8.
+# Job 7 reloads its best checkpoint; job 8 reloads its fitted FAISS centroids.
+
+executable = scripts/condor_run_training.sh
+
+PROJECT_DIR = /eos/home-y/yelberke/enhancing-ntp4jets
+OUTPUT_DIR = /eos/home-y/yelberke/enhancing_ntp4jets_runs
+CONDA_ENV = /eos/home-y/yelberke/conda_condor_orbit_env
+ORBIT_MANIFEST_DIR = /eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final
+GABBRO_ENV_FILE = /eos/home-y/yelberke/wandb.env
+SUITE_ID = orbit_campaign_5m_jobs_7_8_evaluation_$(Cluster)
+
+VQ_CHECKPOINT = /eos/user/y/yelberke/enhancing_ntp4jets_runs/orbit_campaign_5m_jobs_7_8_1234622/orbit-campaign-5m-full500-sm-vq8192/runs/2026-10-05_21-17-30_b9g57n0022_SelectiveTinning/checkpoints/best.ckpt
+FAISS_CODEBOOK = /eos/user/y/yelberke/enhancing_ntp4jets_runs/orbit_campaign_5m_jobs_7_8_1234622/orbit-campaign-5m-full500-sm-faiss4096/runs/2026-10-05_23-27-00_b9pgpun501_ShortBuffer/evaluation/current/artifacts/faiss_kmeans_centroids.npz
+
+arguments = $(PROJECT_DIR) $(OUTPUT_DIR) train $(SUITE_ID) $(Process) \
+  experiment=$(EXPERIMENT) \
+  evaluation=$(TEST_SUITE) \
+  $(ARTIFACT_OVERRIDE) \
+  logger=wandb.yaml \
+  logger.wandb.name=$(EXPERIMENT)_$(TEST_SUITE)_$(Cluster)_$(Process) \
+  logger.wandb.group=$(SUITE_ID) \
+  logger.wandb.project=orbit-tokenizer \
+  data.num_workers=4
+
+environment = "ORBIT_MANIFEST_DIR=$(ORBIT_MANIFEST_DIR) GABBRO_ENV_FILE=$(GABBRO_ENV_FILE) CONDA_ENV=$(CONDA_ENV) WANDB_MODE=online"
+
+log = $(OUTPUT_DIR)/condor_logs/$(SUITE_ID).log
+output = $(OUTPUT_DIR)/condor_logs/$(SUITE_ID)_$(RUN_NAME)_$(TEST_SUITE)_$(Process).out
+error = $(OUTPUT_DIR)/condor_logs/$(SUITE_ID)_$(RUN_NAME)_$(TEST_SUITE)_$(Process).err
+
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+request_cpus = 11
+request_memory = 33GB
+request_gpus = 1
++JobFlavour = "nextweek"
+
+queue RUN_NAME, EXPERIMENT, TEST_SUITE, ARTIFACT_OVERRIDE from (
+  job7_vq8192, orbit_campaign_full500_sm_vq8192_5m, ttbar, ckpt_path_for_evaluation=$(VQ_CHECKPOINT)
+  job7_vq8192, orbit_campaign_full500_sm_vq8192_5m, sm_mixture, ckpt_path_for_evaluation=$(VQ_CHECKPOINT)
+  job7_vq8192, orbit_campaign_full500_sm_vq8192_5m, gghbb, ckpt_path_for_evaluation=$(VQ_CHECKPOINT)
+  job7_vq8192, orbit_campaign_full500_sm_vq8192_5m, minbias, ckpt_path_for_evaluation=$(VQ_CHECKPOINT)
+  job8_faiss4096, orbit_campaign_full500_sm_faiss4096_5m, ttbar, model.codebook_path=$(FAISS_CODEBOOK)
+  job8_faiss4096, orbit_campaign_full500_sm_faiss4096_5m, sm_mixture, model.codebook_path=$(FAISS_CODEBOOK)
+  job8_faiss4096, orbit_campaign_full500_sm_faiss4096_5m, gghbb, model.codebook_path=$(FAISS_CODEBOOK)
+  job8_faiss4096, orbit_campaign_full500_sm_faiss4096_5m, minbias, model.codebook_path=$(FAISS_CODEBOOK)
+)

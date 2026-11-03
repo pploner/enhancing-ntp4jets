@@ -8,7 +8,9 @@ wandb:
   id: null # pass correct id to resume experiment!
   anonymous: null # enable anonymous logging
   project: "deep-learning"
-  log_model: False # upload lightning ckpts
+  # Upload best.ckpt when it improves and each updated last.ckpt while training.
+  # This keeps long/preemptible runs recoverable before they finish.
+  log_model: "all"
   prefix: "" # a string to put at the beginning of metric keys
   # entity: "" # set to name of your wandb team
   group: ""

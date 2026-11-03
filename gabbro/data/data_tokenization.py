@@ -10,6 +10,7 @@ from gabbro.data.loading import (
     read_cms_open_data_file,
     read_jetclass_file,
 )
+from gabbro.models.quantizers import ResidualVectorQuantizer
 from gabbro.models.vqvae import VQVAELightning
 from gabbro.utils.arrays import ak_select_and_preprocess
 from gabbro.utils.jet_types import get_jet_type_from_file_prefix, jet_types_dict
@@ -18,6 +19,63 @@ from gabbro.utils.pylogger import get_pylogger
 vector.register_awkward()
 
 logger = get_pylogger(__name__)
+
+
+def _extract_serialized_tokens(tokenized_array: ak.Array, model) -> ak.Array:
+    """Extract legacy scalar or residual-VQ stage tokens from a saved array."""
+    fields = list(getattr(tokenized_array, "fields", []))
+    is_residual = isinstance(model.model.vqlayer, ResidualVectorQuantizer)
+
+    if is_residual:
+        tokens = (
+            tokenized_array["part_token_id"]
+            if "part_token_id" in fields
+            else tokenized_array
+        )
+        expected = [
+            f"part_token_stage_{stage}"
+            for stage in range(model.model.vqlayer.num_quantizers)
+        ]
+        actual = list(getattr(tokens, "fields", []))
+        if set(actual) != set(expected):
+            raise ValueError(
+                "Residual-VQ reconstruction expected token fields "
+                f"{expected}, got {actual}."
+            )
+        # Give reconstruction a deterministic stage order, independent of how
+        # the Parquet backend returned its columns.
+        return ak.Array({field: tokens[field] for field in expected})
+
+    if not fields:
+        logger.warning(
+            "Token file is in the old flat format. This remains supported, "
+            "but newly written files should use part_token_id."
+        )
+        return tokenized_array
+    if "part_token_id" not in fields:
+        raise ValueError(
+            "Token file has named fields but no 'part_token_id' field: "
+            f"{fields}."
+        )
+    tokens = tokenized_array["part_token_id"]
+    inner_fields = list(getattr(tokens, "fields", []))
+    if not inner_fields:
+        return tokens
+    if inner_fields == ["part_token_id"]:
+        return tokens["part_token_id"]
+    raise ValueError(
+        "Scalar-token reconstruction expected one nested 'part_token_id' "
+        f"field, got {inner_fields}."
+    )
+
+
+def _token_range(tokens: ak.Array) -> tuple[int, int]:
+    """Return a common min/max for scalar or multi-stage token arrays."""
+    fields = list(getattr(tokens, "fields", []))
+    arrays = [tokens[field] for field in fields] if fields else [tokens]
+    return min(int(ak.min(array)) for array in arrays), max(
+        int(ak.max(array)) for array in arrays
+    )
 
 
 def tokenize_jetclass_file(
@@ -400,24 +458,8 @@ def reconstruct_jetclass_file(
             for inner_field in tokenized_file_ak_arr[field].fields:
                 logger.info(f" |   | {inner_field}")
 
-    if len(tokenized_file_ak_arr.fields) > 0:
-        logger.info("Loading tokens from the field 'part_token_id'")
-        tokens = tokenized_file_ak_arr["part_token_id"]
-        logger.info(f"Fields in tokens: {tokens.fields}")
-        if len(tokens.fields) > 1:
-            raise ValueError(
-                "There should be only one field in 'part_token_id' for reconstruction."
-            )
-        else:
-            if len(tokens.fields) == 1:
-                tokens = tokens["part_token_id"]
-
-    else:
-        tokens = tokenized_file_ak_arr
-        logger.warning(
-            f"File {filename_in} is in the old format. At the moment this is still supported, "
-            "but might lead to problems in the future."
-        )
+    tokens = _extract_serialized_tokens(tokenized_file_ak_arr, model)
+    logger.info(f"Token fields used for reconstruction: {tokens.fields}")
 
     jet_features = (
         tokenized_file_ak_arr["jet_features"]
@@ -435,8 +477,9 @@ def reconstruct_jetclass_file(
         logger.info("Shifting tokens by -1")
         tokens = tokens - 1
 
-    logger.info(f"Smallest token in file: {ak.min(tokens)}")
-    logger.info(f"Largest token in file:  {ak.max(tokens)}")
+    token_min, token_max = _token_range(tokens)
+    logger.info(f"Smallest token in file: {token_min}")
+    logger.info(f"Largest token in file:  {token_max}")
 
     x_reco_ak = model.reconstruct_ak_tokens(
         tokens,

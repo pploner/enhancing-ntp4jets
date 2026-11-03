@@ -260,6 +260,8 @@ class OrbitParquetDataset(IterableDataset):
         pid_cfg: Optional[Mapping] = None,
         include_energy: bool = False,
         energy_shift: float = 2.5,
+        auxiliary_jet_sequence_type: Optional[str] = None,
+        max_auxiliary_jets: int = 5,
     ):
         super().__init__()
         if sequence_type not in SEQUENCE_SCHEMAS:
@@ -286,6 +288,36 @@ class OrbitParquetDataset(IterableDataset):
             energy_shift=energy_shift,
         )
         self.features = list(self.preprocessor.input_features)
+        if auxiliary_jet_sequence_type is not None:
+            if auxiliary_jet_sequence_type not in SEQUENCE_SCHEMAS:
+                raise ValueError(
+                    f"Unknown auxiliary_jet_sequence_type "
+                    f"{auxiliary_jet_sequence_type!r}. Expected one of "
+                    f"{sorted(SEQUENCE_SCHEMAS)}"
+                )
+            if not auxiliary_jet_sequence_type.startswith("jet_"):
+                raise ValueError("auxiliary_jet_sequence_type must select a jet schema")
+            if max_auxiliary_jets < 1:
+                raise ValueError("max_auxiliary_jets must be positive when jets are enabled")
+            auxiliary_schema = SEQUENCE_SCHEMAS[auxiliary_jet_sequence_type]
+            self.auxiliary_jet_preprocessor = OrbitPreprocessor(
+                auxiliary_schema["prefix"],
+                include_energy=False,
+                energy_shift=energy_shift,
+            )
+            self.features.extend(self.auxiliary_jet_preprocessor.input_features)
+        else:
+            self.auxiliary_jet_preprocessor = None
+        self.auxiliary_jet_sequence_type = auxiliary_jet_sequence_type
+        self.max_auxiliary_jets = int(max_auxiliary_jets)
+        self.auxiliary_jet_source_length = (
+            max(
+                self.max_auxiliary_jets,
+                SEQUENCE_SCHEMAS[auxiliary_jet_sequence_type]["max_sequence_length"],
+            )
+            if auxiliary_jet_sequence_type is not None
+            else 0
+        )
         pid_cfg = {} if pid_cfg is None else dict(pid_cfg)
         self.pid_enabled = bool(pid_cfg.get("enabled", False))
         self.pid_num_classes = int(pid_cfg.get("num_classes", len(PID_CLASS_NAMES)))
@@ -312,6 +344,7 @@ class OrbitParquetDataset(IterableDataset):
             self.event_filter_pt_column = f"{event_filter_prefix}_PT"
             if self.event_filter_pt_column not in self.features:
                 self.features.append(self.event_filter_pt_column)
+        self.features = list(dict.fromkeys(self.features))
 
         # Keep construction cheap.  In particular, do not open every parquet
         # file here to enumerate row groups: canonical datasets can contain
@@ -470,6 +503,8 @@ class OrbitParquetDataset(IterableDataset):
             )
 
         batch = self.preprocessor.forward(batch)
+        if self.auxiliary_jet_preprocessor is not None:
+            batch = self.auxiliary_jet_preprocessor.forward(batch)
 
         stacked = ak.concatenate(
             [batch[field][sequence_mask][:, :, np.newaxis] for field in self.output_features],
@@ -517,6 +552,57 @@ class OrbitParquetDataset(IterableDataset):
                 (part_features.shape[0],), self.test_suite_label, dtype=torch.long
             ),
         }
+        if self.auxiliary_jet_preprocessor is not None:
+            jet_preprocessor = self.auxiliary_jet_preprocessor
+            jet_stacked = ak.concatenate(
+                [
+                    batch[field][:, :, np.newaxis]
+                    for field in jet_preprocessor.output_features
+                ],
+                axis=-1,
+            )[non_empty_events]
+            jet_lengths = ak.num(jet_stacked, axis=1)
+            padded_jets = ak.pad_none(
+                jet_stacked,
+                self.auxiliary_jet_source_length,
+                axis=1,
+                clip=True,
+            )
+            filled_jets = ak.fill_none(
+                padded_jets,
+                [0.0] * len(jet_preprocessor.output_features),
+                axis=1,
+            )
+            jet_features = torch.from_numpy(
+                ak.to_numpy(filled_jets).astype(np.float32, copy=False)
+            )
+            valid_jet_lengths = torch.from_numpy(
+                np.minimum(
+                    ak.to_numpy(jet_lengths), self.auxiliary_jet_source_length
+                ).astype(np.int64, copy=False)
+            )
+            source_jet_mask = (
+                torch.arange(self.auxiliary_jet_source_length).unsqueeze(0)
+                < valid_jet_lengths.unsqueeze(1)
+            )
+            # Sort the small dense stored-jet collection in Torch. This avoids
+            # an Awkward argsort incompatibility with nullable Arrow list
+            # columns while retaining the true leading-pT jets even if an
+            # input file does not already order its collection.
+            pt_index = jet_preprocessor.output_features.index(
+                jet_preprocessor.pt_column
+            )
+            sort_score = jet_features[..., pt_index].masked_fill(
+                ~source_jet_mask, -torch.inf
+            )
+            jet_order = torch.argsort(sort_score, dim=1, descending=True)
+            jet_order = jet_order[:, : self.max_auxiliary_jets]
+            converted["jet_features"] = torch.gather(
+                jet_features,
+                1,
+                jet_order.unsqueeze(-1).expand(-1, -1, jet_features.shape[-1]),
+            )
+            converted["jet_mask"] = torch.gather(source_jet_mask, 1, jet_order)
         if pid_classes is not None:
             padded_pid = ak.pad_none(pid_classes, self.max_sequence_length, axis=1, clip=True)
             filled_pid = ak.fill_none(padded_pid, -1, axis=1)
@@ -623,6 +709,8 @@ class OrbitParquetDataModule(L.LightningDataModule):
         pid_cfg: Optional[dict] = None,
         include_energy: bool = False,
         energy_shift: float = 2.5,
+        auxiliary_jet_sequence_type: Optional[str] = None,
+        max_auxiliary_jets: int = 5,
         **kwargs,
     ):
         super().__init__()
@@ -1014,6 +1102,8 @@ class OrbitParquetDataModule(L.LightningDataModule):
             pid_cfg=self.hparams.get("pid_cfg"),
             include_energy=self.hparams.include_energy,
             energy_shift=self.hparams.energy_shift,
+            auxiliary_jet_sequence_type=self.hparams.auxiliary_jet_sequence_type,
+            max_auxiliary_jets=self.hparams.max_auxiliary_jets,
         )
 
     def _loader(self, dataset, persistent_workers: bool = True):
@@ -1216,6 +1306,8 @@ class CanonicalOrbitParquetDataModule(L.LightningDataModule):
         return_event_metadata: bool = False,
         include_energy: bool = False,
         energy_shift: float = 2.5,
+        auxiliary_jet_sequence_type: Optional[str] = None,
+        max_auxiliary_jets: int = 5,
         **kwargs,
     ):
         super().__init__()
@@ -1322,8 +1414,16 @@ class CanonicalOrbitParquetDataModule(L.LightningDataModule):
             include_energy=include_energy,
             energy_shift=energy_shift,
         ).output_features
+        self.selected_jet_features = (
+            OrbitPreprocessor(
+                SEQUENCE_SCHEMAS[auxiliary_jet_sequence_type]["prefix"]
+            ).output_features
+            if auxiliary_jet_sequence_type is not None
+            else []
+        )
         self.save_hyperparameters()
         self.hparams["selected_features"] = self.selected_features
+        self.hparams["selected_jet_features"] = self.selected_jet_features
         self.hparams["max_sequence_length"] = self._max_sequence_length
         # Backward-compatible name consumed by existing callbacks.
         self.hparams["class_to_label"] = dict(self._group_to_label)
@@ -1415,6 +1515,8 @@ class CanonicalOrbitParquetDataModule(L.LightningDataModule):
             pid_cfg=self.hparams.get("pid_cfg"),
             include_energy=self.hparams.include_energy,
             energy_shift=self.hparams.energy_shift,
+            auxiliary_jet_sequence_type=self.hparams.auxiliary_jet_sequence_type,
+            max_auxiliary_jets=self.hparams.max_auxiliary_jets,
         )
 
     def _loader(self, dataset, *, persistent_workers: bool = True) -> DataLoader:

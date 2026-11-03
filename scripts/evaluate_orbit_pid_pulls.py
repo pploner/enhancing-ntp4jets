@@ -66,7 +66,14 @@ from gabbro.plotting.orbit import (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", type=Path)
-    parser.add_argument("--test-manifest", type=Path)
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--test-manifest", type=Path)
+    source.add_argument(
+        "--test-class",
+        action="append",
+        metavar="CLASS=MANIFEST[,MANIFEST...]",
+        help="Repeat for balanced top-level classes; manifests within a class are balanced.",
+    )
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--events", type=int, default=10_000)
     parser.add_argument("--batch-size", type=int)
@@ -83,6 +90,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--wandb-group", default="orbit-pid-conditional-residuals")
     parser.add_argument("--wandb-entity")
     return parser.parse_args()
+
+
+def parse_test_classes(values: list[str]) -> dict[str, list[Path]]:
+    """Parse balanced CLASS=manifest[,manifest...] command-line entries."""
+    result = {}
+    for value in values:
+        if "=" not in value:
+            raise ValueError(f"Expected CLASS=MANIFEST[,MANIFEST...], got {value!r}")
+        name, manifests = value.split("=", 1)
+        paths = [Path(item).resolve() for item in manifests.split(",") if item]
+        if not name or not paths or any(not path.is_file() for path in paths):
+            raise ValueError(f"Invalid class specification: {value!r}")
+        result[name] = paths
+    return result
+
+
+def split_event_quota(total: int, count: int) -> list[int]:
+    """Split an integer event budget deterministically and without loss."""
+    return [total // count + (index < total % count) for index in range(count)]
 
 
 def load_model(run_dir: Path, device: torch.device):
@@ -175,7 +201,9 @@ def upload_to_wandb(args: argparse.Namespace) -> str:
             "particles": summary["particles"],
             "run_dir": summary["run_dir"],
             "checkpoint": summary["checkpoint"],
-            "test_manifest": summary["test_manifest"],
+            "test_manifests": summary.get(
+                "test_manifests", {"sample": [summary.get("test_manifest")]}
+            ),
             "conditioning": summary["conditioning"],
         },
     )
@@ -231,8 +259,11 @@ def main() -> None:
             raise ValueError("--upload-only requires --wandb")
         print(f"Uploaded PID-conditioned residuals to {upload_to_wandb(args)}")
         return
-    if args.run_dir is None or args.test_manifest is None:
-        raise ValueError("--run-dir and --test-manifest are required unless --upload-only is used")
+    if args.run_dir is None or (args.test_manifest is None and not args.test_class):
+        raise ValueError(
+            "--run-dir and either --test-manifest or --test-class are required "
+            "unless --upload-only is used"
+        )
     if args.events < 1 or args.bins < 1:
         raise ValueError("--events and --bins must be positive")
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -240,18 +271,34 @@ def main() -> None:
     model, cfg, checkpoint_path = load_model(args.run_dir.resolve(), device)
     sequence_type, max_length, mask_column, mask_min_value = checkpoint_data_settings(cfg)
     batch_size = args.batch_size or (16 if max_length > 128 else 256)
-    dataset = OrbitParquetDataset(
-        args.test_manifest.resolve(),
-        sequence_type=sequence_type,
-        max_sequence_length=max_length,
-        batch_size=batch_size,
-        mask_column=mask_column,
-        mask_min_value=mask_min_value,
-        max_events=args.events,
-        pid_cfg=cfg.get("pid"),
-        include_energy=bool(cfg.data.get("include_energy", False)),
-        energy_shift=float(cfg.data.get("energy_shift", 2.5)),
-    )
+    if args.test_class:
+        test_classes = parse_test_classes(args.test_class)
+    else:
+        test_classes = {"sample": [args.test_manifest.resolve()]}
+    datasets = []
+    for (class_name, manifests), class_quota in zip(
+        test_classes.items(), split_event_quota(args.events, len(test_classes)), strict=True
+    ):
+        for manifest, manifest_quota in zip(
+            manifests, split_event_quota(class_quota, len(manifests)), strict=True
+        ):
+            datasets.append(
+                (
+                    class_name,
+                    OrbitParquetDataset(
+                        manifest,
+                        sequence_type=sequence_type,
+                        max_sequence_length=max_length,
+                        batch_size=batch_size,
+                        mask_column=mask_column,
+                        mask_min_value=mask_min_value,
+                        max_events=manifest_quota,
+                        pid_cfg=cfg.get("pid"),
+                        include_energy=bool(cfg.data.get("include_energy", False)),
+                        energy_shift=float(cfg.data.get("energy_shift", 2.5)),
+                    ),
+                )
+            )
 
     original_chunks = []
     reconstructed_chunks = []
@@ -259,18 +306,19 @@ def main() -> None:
     decoded_pid_chunks = []
     processed_events = 0
     with tqdm(total=args.events, desc="Evaluating PID-conditioned residuals", unit="event") as bar:
-        for batch in dataset:
-            reconstructed, decoded_pid = decode_batch(model, batch, device)
-            original = batch["part_features"].numpy()
-            original_pid = batch["part_pid"].numpy()
-            mask = batch["part_mask"].numpy().astype(bool)
-            original_chunks.append(original[mask])
-            reconstructed_chunks.append(reconstructed[mask])
-            original_pid_chunks.append(original_pid[mask])
-            decoded_pid_chunks.append(decoded_pid[mask])
-            batch_events = len(mask)
-            processed_events += batch_events
-            bar.update(batch_events)
+        for _, dataset in datasets:
+            for batch in dataset:
+                reconstructed, decoded_pid = decode_batch(model, batch, device)
+                original = batch["part_features"].numpy()
+                original_pid = batch["part_pid"].numpy()
+                mask = batch["part_mask"].numpy().astype(bool)
+                original_chunks.append(original[mask])
+                reconstructed_chunks.append(reconstructed[mask])
+                original_pid_chunks.append(original_pid[mask])
+                decoded_pid_chunks.append(decoded_pid[mask])
+                batch_events = len(mask)
+                processed_events += batch_events
+                bar.update(batch_events)
 
     original = np.concatenate(original_chunks)
     reconstructed = np.concatenate(reconstructed_chunks)
@@ -288,7 +336,9 @@ def main() -> None:
     summary = {
         "run_dir": str(args.run_dir.resolve()),
         "checkpoint": str(checkpoint_path),
-        "test_manifest": str(args.test_manifest.resolve()),
+        "test_manifests": {
+            name: [str(path) for path in paths] for name, paths in test_classes.items()
+        },
         "events": processed_events,
         "particles": int(len(original_pid)),
         "conditioning": "original PID at the same sequence position",

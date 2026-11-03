@@ -1,0 +1,38 @@
+# Three-way stored-jet-token ablation on the five-million-event SM mixture.
+
+executable = scripts/condor_run_training.sh
+
+PROJECT_DIR = /eos/home-y/yelberke/enhancing-ntp4jets
+OUTPUT_DIR = /eos/home-y/yelberke/enhancing_ntp4jets_runs
+CONDA_ENV = /eos/home-y/yelberke/conda_condor_orbit_env
+ORBIT_MANIFEST_DIR = /eos/home-y/yelberke/enhancing-ntp4jets/manifests/production_final
+GABBRO_ENV_FILE = /eos/home-y/yelberke/wandb.env
+SUITE_ID = orbit_campaign_5m_jet_token_ablation_$(Cluster)
+
+arguments = $(PROJECT_DIR) $(OUTPUT_DIR) train $(SUITE_ID) $(Process) \
+  experiment=$(EXPERIMENT) \
+  logger=wandb.yaml \
+  task_name=$(EXPERIMENT) \
+  logger.wandb.name=$(EXPERIMENT)_$(Cluster)_$(Process) \
+  logger.wandb.group=$(SUITE_ID) \
+  logger.wandb.project=orbit-tokenizer \
+  data.num_workers=4
+
+environment = "ORBIT_MANIFEST_DIR=$(ORBIT_MANIFEST_DIR) GABBRO_ENV_FILE=$(GABBRO_ENV_FILE) CONDA_ENV=$(CONDA_ENV) WANDB_MODE=online"
+
+log = $(OUTPUT_DIR)/condor_logs/$(SUITE_ID).log
+output = $(OUTPUT_DIR)/condor_logs/$(SUITE_ID)_$(RUN_NAME)_$(Process).out
+error = $(OUTPUT_DIR)/condor_logs/$(SUITE_ID)_$(RUN_NAME)_$(Process).err
+
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+request_cpus = 11
+request_memory = 33GB
+request_gpus = 1
++JobFlavour = "nextweek"
+
+queue RUN_NAME, EXPERIMENT from (
+  control, orbit_campaign_full500_sm_jettoken_control_vq4096_5m
+  jet_tokens_no_loss, orbit_campaign_full500_sm_jettoken_noloss_vq4096_5m
+  jet_tokens_with_loss, orbit_campaign_full500_sm_jettoken_loss_vq4096_5m
+)

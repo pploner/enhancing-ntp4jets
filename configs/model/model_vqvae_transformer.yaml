@@ -44,6 +44,7 @@ model_kwargs:
     rotation_scale_min: null
     rotation_scale_max: null
   split_quantizer_cfg: null
+  residual_quantizer_cfg: null
 
 optimizer:
   _target_: torch.optim.AdamW

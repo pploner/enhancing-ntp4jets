@@ -1,0 +1,22 @@
+# @package _global_
+
+defaults:
+  - orbit_campaign_full500_sm_vq4096_5m
+  - _self_
+
+project_name: orbit-campaign-5m-full500-sm-jettoken-control-vq4096
+task_name: orbit_campaign_full500_sm_jettoken_control_vq4096_5m
+tags: [orbit, campaign, 5m, SM, particle-full, vq-ste, codes-4096, alpha-10, lr-1e-4, constant-lr, jet-token-ablation, control]
+
+# Match the jet-token models' parameterization and maximum sequence capacity,
+# while presenting particles only. This isolates the effect of the five stored
+# jet tokens from the token-type embeddings themselves.
+data:
+  auxiliary_jet_sequence_type: null
+  max_auxiliary_jets: 5
+
+model:
+  model_kwargs:
+    max_sequence_len: 505
+    token_type_count: 2
+    jet_reconstruction_loss_weight: 0.0

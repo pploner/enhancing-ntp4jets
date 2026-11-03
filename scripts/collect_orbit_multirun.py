@@ -188,6 +188,22 @@ def _quantizer_metadata(cfg: DictConfig) -> dict[str, Any]:
             "total_codebook_size": None,
             "branches": {},
         }
+    residual_cfg = _get_nested(model_kwargs, "residual_quantizer_cfg")
+    if residual_cfg:
+        codebook_size = int(_get_nested(residual_cfg, "codebook_size"))
+        num_quantizers = int(_get_nested(residual_cfg, "num_quantizers"))
+        return {
+            "quantizer_mode": "residual_vq",
+            "quantizer_family": "residual_vq",
+            "total_codebook_size": codebook_size**num_quantizers,
+            "per_stage_codebook_size": codebook_size,
+            "num_quantizers": num_quantizers,
+            "stored_code_vectors": codebook_size * num_quantizers,
+            "fixed_bits_per_latent": (
+                int(codebook_size - 1).bit_length() * num_quantizers
+            ),
+            "branches": {},
+        }
     split_cfg = _get_nested(model_kwargs, "split_quantizer_cfg")
     if not split_cfg or split_cfg.get("mode", "vq") == "vq":
         num_codes = int(_get_nested(_get_nested(model_kwargs, "vq_kwargs"), "num_codes"))

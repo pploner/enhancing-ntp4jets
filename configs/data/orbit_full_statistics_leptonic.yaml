@@ -1,0 +1,14 @@
+defaults:
+  - orbit_full_statistics
+  - _self_
+
+# Charged-lepton subset of the established SM mixture. Keep the campaign's
+# two-level balancing: equal top-level tt/VJets/DY/VV shares, followed by an
+# equal WW/WZ/ZZ split inside VV.
+train_val_processes:
+  tt_leptonic: {paths: "${data.process_catalog.tt_leptonic.train_val}", group: tt}
+  WJetsToLNu: {paths: "${data.process_catalog.WJetsToLNu.train_val}", group: VJets}
+  DYJetsToLL: {paths: "${data.process_catalog.DYJetsToLL.train_val}", group: DY}
+  WW_leptonic: {paths: "${data.process_catalog.WW_leptonic.train_val}", group: VV}
+  WZ_leptonic: {paths: "${data.process_catalog.WZ_leptonic.train_val}", group: VV}
+  ZZ_leptonic: {paths: "${data.process_catalog.ZZ_leptonic.train_val}", group: VV}

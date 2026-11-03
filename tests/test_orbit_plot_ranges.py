@@ -32,6 +32,10 @@ def test_class_specific_physics_ranges_and_overflow_bins():
         0.0,
         200.0,
     )
+    assert (
+        histograms["missing_et_diff_bins"][0],
+        histograms["missing_et_diff_bins"][-1],
+    ) == (-200.0, 200.0)
     assert (histograms["jet_mass_bins"][0], histograms["jet_mass_bins"][-1]) == (
         0.0,
         3_000.0,

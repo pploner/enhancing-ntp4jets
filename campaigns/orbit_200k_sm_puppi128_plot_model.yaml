@@ -1,0 +1,8 @@
+models:
+  - id: puppi128_sm200k_vq4096
+    label: SM-mixture training, 200k events, PUPPI 128
+    selection: puppi128
+    quantizer: VQ-STE
+    codes: 4096
+    config: /eos/user/y/yelberke/enhancing_ntp4jets_runs/orbit_vq_ste_scan_canonical_orbit_canonical_qcd_tt_vjets_vv_1001382/orbit-canonical-qcd-tt-vjets-vv/runs/2026-08-25_04-09-47_b9pgpun218_HighbrowDemister/.hydra/config.yaml
+    checkpoint: /eos/user/y/yelberke/enhancing_ntp4jets_runs/orbit_vq_ste_scan_canonical_orbit_canonical_qcd_tt_vjets_vv_1001382/orbit-canonical-qcd-tt-vjets-vv/runs/2026-08-25_04-09-47_b9pgpun218_HighbrowDemister/checkpoints/best.ckpt

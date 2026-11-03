@@ -399,6 +399,86 @@ class OrbitPlottingCallback(L.Callback):
                 )
             except Exception as exc:
                 logger.warning(f"Failed to log PID residual summary table: {exc}")
+
+    def _plot_jet_token_reconstruction(
+        self,
+        trainer,
+        pl_module,
+        stage: str,
+        suite_name: str | None,
+        event_selector: np.ndarray,
+    ) -> None:
+        """Plot direct reconstruction of the optional stored jet tokens."""
+        jet_original = getattr(pl_module, f"{stage}_jet_original_concat", None)
+        jet_reco = getattr(pl_module, f"{stage}_jet_reco_concat", None)
+        jet_mask = getattr(pl_module, f"{stage}_jet_mask_concat", None)
+        if jet_original is None or jet_reco is None or jet_mask is None:
+            return
+        jet_original = jet_original[event_selector]
+        jet_reco = jet_reco[event_selector]
+        jet_mask = jet_mask[event_selector].astype(bool)
+        if not np.any(jet_mask):
+            return
+
+        feature_names = list(
+            getattr(trainer.datamodule.hparams, "selected_jet_features", [])
+        )
+        if not feature_names:
+            feature_names = [
+                f"jet_feature_{index}" for index in range(jet_original.shape[-1])
+            ]
+        histograms = collect_reconstruction_histograms(
+            feature_names=feature_names,
+            x_np=jet_original,
+            x_hat_np=jet_reco,
+            mask_np=jet_mask,
+        )
+        mse_per_feature = np.sum(
+            ((jet_reco - jet_original) ** 2) * jet_mask[..., None],
+            axis=(0, 1),
+        ) / max(int(jet_mask.sum()), 1)
+        suite_label = suite_name or "all"
+        namespace = stage if suite_name is None else f"{stage}/{suite_name}"
+        figures = {
+            f"{namespace}/jet_tokens/orbit_reconstruction_features": plot_feature_histograms(
+                histograms,
+                feature_names,
+                mse_per_feature=mse_per_feature,
+                title=f"{stage.capitalize()} {suite_label} stored-jet reconstruction",
+            ),
+            f"{namespace}/jet_tokens/orbit_reconstruction_residuals": plot_residual_histograms(
+                histograms,
+                feature_names,
+                title=f"{stage.capitalize()} {suite_label} stored-jet residuals",
+            ),
+        }
+        suffix = "" if suite_name is None else f"_{suite_name}"
+        for name, figure in figures.items():
+            stem = name.rsplit("/", 1)[-1]
+            path = self._plot_dir(trainer) / self._figure_name(
+                trainer,
+                stage,
+                f"jet_tokens{suffix}_{stem}",
+            )
+            figure.savefig(path, dpi=220, bbox_inches="tight")
+            self._log_figure(trainer, path, name)
+            close_figure(figure)
+
+        self._log_metrics(
+            trainer,
+            stage,
+            "jet_tokens",
+            {
+                "metrics/mse_total": float(np.mean(mse_per_feature)),
+                "metrics/valid_jets": int(jet_mask.sum()),
+                **{
+                    f"metrics/mse_{name}": float(value)
+                    for name, value in zip(feature_names, mse_per_feature)
+                },
+            },
+            suite_name=suite_name,
+        )
+
     @staticmethod
     def _wandb_figure_key(name: str) -> str:
         parts = [part.strip().replace(" ", "_") for part in name.split("/") if part.strip()]
@@ -1023,6 +1103,13 @@ class OrbitPlottingCallback(L.Callback):
                 ]
 
         for suite_name, suite_selector in suite_selections:
+            self._plot_jet_token_reconstruction(
+                trainer,
+                pl_module,
+                stage,
+                suite_name,
+                suite_selector,
+            )
             if stage == "test":
                 self._plot_pid_residuals_for_suite(
                     trainer,
@@ -1185,6 +1272,9 @@ class OrbitPlottingCallback(L.Callback):
                     mask,
                     num_codes=num_codes,
                     branch_specs=self._entropy_branch_specs(pl_module),
+                    num_quantizers=int(
+                        getattr(pl_module.model.vqlayer, "num_quantizers", 1)
+                    ),
                 )
             )
         else:

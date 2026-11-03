@@ -252,6 +252,38 @@ LOG_DIR="$PWD/outputs" uv run --locked python gabbro/train.py \
   trainer.enable_checkpointing=true
 ```
 
+### Train with residual VQ
+
+Residual VQ keeps one encoder and decoder, but quantizes each latent through a
+configurable sequence of independent codebooks. Each stage encodes the residual
+left by the preceding stages, and the decoder receives the sum of the selected
+code vectors. Select the checked-in model config and override the depth `Q` and
+per-stage size `K` as needed:
+
+```bash
+LOG_DIR="$PWD/outputs" uv run --locked python gabbro/train.py \
+  experiment=orbit_parquet_smoke \
+  model=model_vqvae_transformer_residual \
+  model.model_kwargs.latent_dim=8 \
+  model.model_kwargs.residual_quantizer_cfg.num_quantizers=3 \
+  model.model_kwargs.residual_quantizer_cfg.codebook_size=16
+```
+
+The codebooks are independent and updated by EMA. The quantizer loss is the
+mean per-stage commitment loss multiplied by
+`residual_quantizer_cfg.commitment_weight`; the single-VQ `alpha` multiplier is
+not applied again. The checked-in starting point uses `Q=3`, `K=16`, latent
+dimension `d=8`, commitment weight `1.0`, and EMA decay `0.8`. The latent
+dimension remains configurable through `model.model_kwargs.latent_dim`.
+
+A valid element exports `Q` fields named
+`part_token_stage_0`, ..., `part_token_stage_{Q-1}`. Fixed-width rate is
+`Q * ceil(log2(K))` bits per latent element, and empirical rate is the sum of
+the stage-wise marginal entropies. There are `K^Q` possible stage-index
+combinations but only `Q*K` stored code vectors. These multi-stage records can
+be tokenized to and reconstructed from Parquet; scalar-token autoregressive
+backbones are not yet supported for residual-VQ tokens.
+
 ### Train with the split quantizer
 
 The split model applies:
@@ -291,6 +323,10 @@ single quantizer:
 
 split quantizer:
   quantizer_loss = sum(branch_loss[branch] * branch_loss_weights[branch])
+  total_loss = reconstruction_loss + quantizer_loss
+
+residual quantizer:
+  quantizer_loss = commitment_weight * mean(stage_commitment_losses)
   total_loss = reconstruction_loss + quantizer_loss
 ```
 
@@ -1063,6 +1099,13 @@ original reconstruction marked as the common reference. A complementary mass
 response plot shows the fitted decoded-to-original peak ratio,
 $\mu_{\mathrm{decoded}}/\mu_{\mathrm{original}}$, against the marginal
 compressed rate normalized to the 40-bit common particle payload.
+
+The newer LaTeX-ready writeup collection extends this workflow with ratio
+panels, PDF output, the eight-run 5M ablation table, downstream Higgs/tau32/jet
+plots, and a generated model-provenance index. It remains CLI- and cache-driven
+rather than introducing a plotting YAML. See
+[`docs/orbit_writeup_plots.md`](docs/orbit_writeup_plots.md) for cache and
+rendering commands.
 
 For PID-enabled tokenizers, evaluate the dimuon response on leptonic ZZ events
 using the leading reconstructed muon and antimuon in each representation. The

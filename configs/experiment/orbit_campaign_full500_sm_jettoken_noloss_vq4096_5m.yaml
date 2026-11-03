@@ -1,0 +1,18 @@
+# @package _global_
+
+defaults:
+  - orbit_campaign_full500_sm_jettoken_control_vq4096_5m
+  - _self_
+
+project_name: orbit-campaign-5m-full500-sm-jettoken-noloss-vq4096
+task_name: orbit_campaign_full500_sm_jettoken_noloss_vq4096_5m
+tags: [orbit, campaign, 5m, SM, particle-full, vq-ste, codes-4096, alpha-10, lr-1e-4, constant-lr, jet-token-ablation, jet-tokens, no-jet-loss]
+
+data:
+  auxiliary_jet_sequence_type: jet_puppi_ak4
+
+# The jets participate in attention and quantization, but their direct
+# reconstruction error is deliberately excluded from the objective.
+model:
+  model_kwargs:
+    jet_reconstruction_loss_weight: 0.0

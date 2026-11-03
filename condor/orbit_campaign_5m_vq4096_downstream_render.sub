@@ -1,0 +1,24 @@
+executable = /eos/home-y/yelberke/conda_condor_orbit_env/bin/python
+
+PROJECT_DIR = /eos/home-y/yelberke/enhancing-ntp4jets
+RUN_DIR = /eos/user/y/yelberke/enhancing_ntp4jets_runs/plotting_runs/full500-sm-vq4096
+CACHE_DIR = /eos/user/y/yelberke/enhancing_ntp4jets_runs/writeup_cache/full500_sm_vq4096
+OUTPUT_DIR = /eos/user/y/yelberke/enhancing_ntp4jets_runs/writeup_plots_sm_vq4096/models_5m/downstream/vq_ste_4096_sm
+LOG_DIR = /eos/user/y/yelberke/enhancing_ntp4jets_runs/condor_logs
+
+initialdir = $(PROJECT_DIR)
+arguments = scripts/build_orbit_downstream_plots.py --run-dir $(RUN_DIR) --cache-dir $(CACHE_DIR) --output-dir $(OUTPUT_DIR)
+environment = "PYTHONPATH=$(PROJECT_DIR)/vqtorch:$(PROJECT_DIR)"
+
+log = $(LOG_DIR)/orbit_campaign_5m_vq4096_downstream_render_$(Cluster).log
+output = $(LOG_DIR)/orbit_campaign_5m_vq4096_downstream_render_$(Cluster)_$(Process).out
+error = $(LOG_DIR)/orbit_campaign_5m_vq4096_downstream_render_$(Cluster)_$(Process).err
+
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+request_cpus = 1
+request_memory = 4GB
+request_gpus = 0
++JobFlavour = "espresso"
+
+queue 1

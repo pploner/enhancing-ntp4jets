@@ -1,0 +1,35 @@
+JOB F500_TT condor/orbit_campaign_5m_comparison_cache.sub
+VARS F500_TT SELECTION="full500" SUITE="ttbar" JOB_FLAVOUR="workday"
+RETRY F500_TT 1
+JOB F500_SM condor/orbit_campaign_5m_comparison_cache.sub
+VARS F500_SM SELECTION="full500" SUITE="sm_mixture" JOB_FLAVOUR="workday"
+RETRY F500_SM 1
+JOB F500_H condor/orbit_campaign_5m_comparison_cache.sub
+VARS F500_H SELECTION="full500" SUITE="gghbb" JOB_FLAVOUR="workday"
+RETRY F500_H 1
+JOB F500_MB condor/orbit_campaign_5m_comparison_cache.sub
+VARS F500_MB SELECTION="full500" SUITE="minbias" JOB_FLAVOUR="workday"
+RETRY F500_MB 1
+
+JOB P128_TT condor/orbit_campaign_5m_comparison_cache.sub
+VARS P128_TT SELECTION="puppi128" SUITE="ttbar" JOB_FLAVOUR="workday"
+RETRY P128_TT 1
+JOB P128_SM condor/orbit_campaign_5m_comparison_cache.sub
+VARS P128_SM SELECTION="puppi128" SUITE="sm_mixture" JOB_FLAVOUR="workday"
+RETRY P128_SM 1
+JOB P128_H condor/orbit_campaign_5m_comparison_cache.sub
+VARS P128_H SELECTION="puppi128" SUITE="gghbb" JOB_FLAVOUR="workday"
+RETRY P128_H 1
+JOB P128_MB condor/orbit_campaign_5m_comparison_cache.sub
+VARS P128_MB SELECTION="puppi128" SUITE="minbias" JOB_FLAVOUR="workday"
+RETRY P128_MB 1
+
+JOB F500_TAU condor/orbit_campaign_5m_comparison_cache.sub
+VARS F500_TAU SELECTION="full500" SUITE="tau32" JOB_FLAVOUR="tomorrow"
+RETRY F500_TAU 1
+JOB P128_TAU condor/orbit_campaign_5m_comparison_cache.sub
+VARS P128_TAU SELECTION="puppi128" SUITE="tau32" JOB_FLAVOUR="workday"
+RETRY P128_TAU 1
+
+JOB RENDER condor/orbit_campaign_5m_comparison_render.sub
+PARENT F500_TT F500_SM F500_H F500_MB P128_TT P128_SM P128_H P128_MB F500_TAU P128_TAU CHILD RENDER

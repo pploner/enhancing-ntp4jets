@@ -42,7 +42,7 @@ from gabbro.utils.orbit_firmware import (
     PUPPI_COMMON_BITS,
     quantize_puppi_common,
 )
-from scripts.export_orbit_event_binaries import _collect_class, _load_model
+from scripts.export_orbit_event_binaries import _collect_class, _load_model, _quantizer_shape
 
 
 TT_PROCESSES = OrderedDict(
@@ -185,7 +185,16 @@ def build_dataset(cfg, manifest: Path, events: int, batch_size: int):
     )
 
 
-def collect_sample(model, cfg, manifest_root, process_spec, batch_size, device, num_codes):
+def collect_sample(
+    model,
+    cfg,
+    manifest_root,
+    process_spec,
+    batch_size,
+    device,
+    num_codes,
+    num_quantizers,
+):
     records = []
     allocation = {}
     for process, (manifest_name, event_count) in process_spec.items():
@@ -199,6 +208,7 @@ def collect_sample(model, cfg, manifest_root, process_spec, batch_size, device, 
             event_count,
             num_codes,
             progress_description=f"Exporting {process}",
+            num_quantizers=num_quantizers,
         )
         if len(pids) != len(originals):
             raise RuntimeError(f"PID data are required for firmware packing ({process})")
@@ -377,7 +387,7 @@ def main() -> None:
     if not config_path.is_file() or not checkpoint.is_file():
         raise FileNotFoundError(f"Expected config_resolved.yaml and checkpoints/best.ckpt below {run_dir}")
     cfg = OmegaConf.load(config_path)
-    num_codes = int(cfg.model.model_kwargs.vq_kwargs.num_codes)
+    num_codes, num_quantizers = _quantizer_shape(cfg)
     token_bits = bits_for_size(num_codes)
     configured_length = cfg.data.get("max_sequence_length")
     default_length = 500 if cfg.data.get("sequence_type") == "particle_full" else 128
@@ -400,6 +410,7 @@ def main() -> None:
         "manifest_root": str(args.manifest_root.resolve()),
         "events_per_sample": args.events_per_sample,
         "num_codes": num_codes,
+        "num_quantizers": num_quantizers,
         "token_bits": token_bits,
         "plain_layout": {
             "bits_per_candidate": PUPPI_COMMON_BITS,
@@ -428,7 +439,14 @@ def main() -> None:
     for sample in args.samples:
         spec = sample_processes(sample, args.events_per_sample)
         records, allocation = collect_sample(
-            model, cfg, args.manifest_root.resolve(), spec, batch_size, device, num_codes
+            model,
+            cfg,
+            args.manifest_root.resolve(),
+            spec,
+            batch_size,
+            device,
+            num_codes,
+            num_quantizers,
         )
         rng.shuffle(records)
         originals, pids, tokens = map(list, zip(*records))
@@ -466,7 +484,13 @@ def main() -> None:
             token_path,
             tokens,
             bits_per_value=token_bits,
-            metadata={**common_metadata, "kind": "vq_token_ids", "num_codes": num_codes},
+            metadata={
+                **common_metadata,
+                "kind": "vq_token_ids",
+                "num_codes": num_codes,
+                "num_quantizers": num_quantizers,
+                "token_order": "latent-major, then residual stage",
+            },
         )
         plain_xz = compress_lzma(plain_path)
         token_xz = compress_lzma(token_path)
