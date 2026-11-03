@@ -1,0 +1,57 @@
+defaults:
+  - orbit_canonical
+  - _self_
+
+# Phase-2 L1 NanoAOD-style ROOT ntuples: one merged file per process with an
+# `Events` tree of `<Collection>_<variable>` branches. Children of this config
+# pick processes from `root_catalog` with `format: root`.
+#
+# The PUPPI candidates in these ntuples are already pre-filtered at ntuple
+# level (pT >= 1 GeV, puppiWeight >= ~0.04) and are NOT stored pT-sorted, so
+# sort_by_pt is required before the 128-particle truncation (collide-2v parquet
+# collections are stored pT-descending).
+
+# Same selection as the collide-2v puppi128 campaign: PuppiW > 0.05, leading 128.
+sequence_type: particle
+max_sequence_length: 128
+batch_size: 256
+
+root:
+  tree: Events
+  sort_by_pt: true
+  # Entries read per chunk; chunks are the unit of shuffling and of worker
+  # assignment (like parquet row groups).
+  step_size: 10000
+  # Same proportions as the collide-2v canonical split (20% test, remaining
+  # 80% split 80/20 into train/val). Each file's entries are cut into
+  # split_block_size blocks, shuffled with data.split_seed, and every split
+  # takes its fraction of the shuffled blocks (split sizes are therefore
+  # multiples of split_block_size). null = contiguous entry ranges instead.
+  split_block_size: 1000
+  entry_splits:
+    train: [0.0, 0.64]
+    val: [0.64, 0.8]
+    test: [0.8, 1.0]
+  # Internal ORBIT column (collection prefix + variable) -> ROOT branch
+  # (`prefix` + "_" + value). Only the columns the loader needs are read.
+  columns:
+    L1T_PUPPIPart:
+      prefix: L1PuppiCands
+      PT: pt
+      Eta: eta
+      Phi: phi
+      PuppiW: puppiWeight
+      PID: pdgId
+      Charge: charge
+    # Needed only for eval_sequence_type / auxiliary jets. L1PuppiJets are the
+    # Phase-2 L1 seeded-cone jets, not anti-kT AK4: check before mapping them.
+    # L1T_JetPuppiAK4: {prefix: L1PuppiJets, PT: pt, Eta: eta, Phi: phi}
+
+# Entries per file: QCD 89,000; DY 979,000; TT 294,000; MinBias 1,992,000;
+# HH4b 49,000. DY has no GenCands_* branches (not used here).
+root_catalog:
+  QCD: /eos/user/m/maglowac/P2_samples/QCD_all_flat_1761558869/data/merged.root
+  DY: /eos/user/m/maglowac/P2_samples/DY_1760632751/data/merged.root
+  TT: /eos/user/m/maglowac/P2_samples/TT_1760944672/data/merged.root
+  MinBias: /eos/user/m/maglowac/P2_samples/MinBias_1760945623/data/merged.root
+  HH4b: /eos/user/m/maglowac/P2_samples/HH4B_1760945087/data/merged.root

@@ -1,4 +1,4 @@
-_target_: gabbro.data.orbit_parquet.CanonicalOrbitParquetDataModule
+_target_: gabbro.data.orbit_canonical.CanonicalOrbitDataModule
 
 train_val_processes: null
 test_suites: null
@@ -19,3 +19,7 @@ shuffle_seed: 42
 mask_column: null
 mask_min_value: null
 min_pt: null
+# null = pin when CUDA is available (previous behaviour). Pinning measured
+# ~0.3 s per 256-event batch on the orbit-dev MIG pod (2026-11-03); set false
+# if it limits throughput on the training pod.
+pin_memory: null

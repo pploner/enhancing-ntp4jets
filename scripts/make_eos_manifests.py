@@ -9,7 +9,7 @@ python scripts/make_eos_manifests.py \
 Each immediate subdirectory of ``--eos-root`` is treated as one process class.
 One ``.txt`` manifest (one absolute path per line) is written to ``--out-dir``
 for every class found.  The manifest format is understood by the existing
-``_read_path_manifest`` loader in ``gabbro/data/orbit_parquet.py``.
+``read_path_manifest`` loader in ``gabbro/data/orbit_common.py``.
 """
 
 import argparse

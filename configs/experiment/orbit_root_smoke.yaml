@@ -1,0 +1,9 @@
+# @package _global_
+
+defaults:
+  - orbit_parquet_smoke
+  - override /data: orbit_root_smoke.yaml
+  - _self_
+
+project_name: "orbit-root-smoke"
+tags: ["orbit", "root", "smoke"]

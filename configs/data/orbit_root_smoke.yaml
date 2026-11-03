@@ -1,0 +1,24 @@
+defaults:
+  - orbit_root
+  - _self_
+
+# Synthetic NanoAOD-style fixture; create it with
+#   uv run --locked python scripts/generate_test_root.py ../test_data/particle_smoke.root
+root_catalog:
+  TT: ${oc.env:ORBIT_ROOT_SMOKE_FILE,${paths.work_dir}/../test_data/particle_smoke.root}
+
+root:
+  # The fixture has only ~1000 entries; 1000-entry blocks would leave val/test empty.
+  split_block_size: 10
+
+train_event_budget: 64
+val_event_budget: 32
+
+train_val_processes:
+  TT: {format: root, paths: "${data.root_catalog.TT}", group: tt}
+
+test_suites:
+  ttbar:
+    event_budget: 32
+    processes:
+      TT: {format: root, paths: "${data.root_catalog.TT}", group: tt}

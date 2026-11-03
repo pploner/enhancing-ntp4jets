@@ -25,6 +25,11 @@ trainer:
   limit_val_batches: 1
   enable_checkpointing: false
 
+callbacks:
+  # orbit_plotting_callbacks includes a ModelCheckpoint, which Lightning rejects
+  # when enable_checkpointing is false.
+  model_checkpoint: null
+
 model:
   model_type: VQVAETransformer
   scheduler_lightning_kwargs:

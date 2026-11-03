@@ -1,0 +1,24 @@
+defaults:
+  - orbit_root
+  - _self_
+
+# Every TT event, split by entry_splits/split_block_size in orbit_root.yaml:
+# 294,000 entries = 294 blocks -> 188 / 47 / 59 blocks
+# = 188,000 train / 47,000 val / 59,000 test.
+train_event_budget: 188000
+val_event_budget: 47000
+# Explicit per-process quotas (must sum to the budgets); with more processes,
+# drop these to get the group-balanced allocation instead.
+train_event_quotas:
+  TT: 188000
+val_event_quotas:
+  TT: 47000
+
+train_val_processes:
+  TT: {format: root, paths: "${data.root_catalog.TT}", group: tt}
+
+test_suites:
+  ttbar:
+    event_budget: 59000
+    processes:
+      TT: {format: root, paths: "${data.root_catalog.TT}", group: tt}

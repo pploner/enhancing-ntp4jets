@@ -1,0 +1,23 @@
+# @package _global_
+
+# Phase-2 L1 ROOT TT sample with the puppi128 VQ-4096 model and the team's 5M
+# campaign recipe (alpha 10, constant LR 1e-4, 256-event physical batches), for
+# comparison with orbit_campaign_puppi128_tt_vq4096_5m on collide-2v.
+# Note: TT has only 188,160 training events per epoch (vs 5M), so 30 epochs
+# are far fewer optimizer steps than the 5M runs.
+
+defaults:
+  - orbit_campaign_puppi128_sm_vq4096
+  - override /data: orbit_root_tt.yaml
+  - _self_
+
+project_name: orbit-root-tt-vq4096
+task_name: orbit_root_tt_vq4096
+tags: [orbit, root, phase2-l1, tt, particle, puppiw-0p05, vq-ste, codes-4096, alpha-10, lr-1e-4, constant-lr]
+
+model:
+  model_kwargs:
+    alpha: 10
+  optimizer:
+    lr: 1e-4
+  scheduler: null
