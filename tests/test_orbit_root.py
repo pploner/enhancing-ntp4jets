@@ -444,3 +444,40 @@ def test_pin_memory_can_be_disabled(tmp_path):
     assert all(loader.pin_memory is False for loader in dm.test_dataloader())
     default = _canonical(tmp_path)
     assert default.val_dataloader().pin_memory is torch.cuda.is_available()
+
+
+def test_quota_equal_to_all_entries_is_filled_with_uneven_worker_shares(tmp_path, monkeypatch):
+    events = _random_events(90, seed=23)
+    _write_root(tmp_path / "events.root", events)
+    expected = _non_empty_rows(events, range(90))
+
+    def rows_with(num_workers):
+        dataset = OrbitRootDataset(
+            str(tmp_path / "events.root"),
+            columns=COLUMNS,
+            # 7-entry shuffled blocks give chunks of unequal size per worker.
+            split_block_size=7,
+            step_size=20,
+            batch_size=4,
+            shuffle=True,
+            pid_cfg=PID,
+            max_events=90,
+            partition_max_events_across_workers=True,
+            return_event_metadata=True,
+        )
+        return _all_rows(DataLoader(dataset, batch_size=None, num_workers=num_workers))
+
+    rows = rows_with(3)
+    assert len(rows) == len(set(rows))
+    assert set(rows) == expected
+
+    # The previous even split (90 / 3 = 30 per worker) loses events here: the
+    # workers' shares are 27 / 39 / 19 non-empty events, so 9 are never read.
+    prepare = OrbitRootDataset._prepare_iteration
+
+    def even_split(self, worker_info, rng):
+        prepare(self, worker_info, rng)
+        return None
+
+    monkeypatch.setattr(OrbitRootDataset, "_prepare_iteration", even_split)
+    assert len(rows_with(3)) == len(expected) - 9

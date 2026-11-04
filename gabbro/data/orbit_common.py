@@ -10,7 +10,7 @@ and class balancing are shared.
 import os
 import sys
 import traceback
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Optional
 
@@ -132,6 +132,31 @@ def expand_paths(paths, data_suffixes: set[str]) -> list[str]:
     for path in paths:
         expanded.extend(expand_path_entry(path, data_suffixes))
     return expanded
+
+
+def proportional_quotas(total: int, shares: Sequence[int]) -> list[int]:
+    """Split an event budget over workers in proportion to the entries each one reads.
+
+    Each worker gets at most its own entries; below that, the quotas sum to
+    ``total`` exactly (largest remainders first, ties to the lower index).
+
+    >>> proportional_quotas(100, [50, 30, 20])
+    [50, 30, 20]
+    >>> proportional_quotas(5, [5, 3, 2])
+    [3, 1, 1]
+    >>> proportional_quotas(47000, [11000, 12000, 12000, 12000])
+    [11000, 12000, 12000, 12000]
+    """
+    shares = [int(share) for share in shares]
+    available = sum(shares)
+    if total >= available:
+        return shares
+    quotas = [total * share // available for share in shares]
+    remainders = [total * share % available for share in shares]
+    order = sorted(range(len(shares)), key=lambda index: (-remainders[index], index))
+    for index in order[: total - sum(quotas)]:
+        quotas[index] += 1
+    return quotas
 
 
 def _log_worker_exception(message: str, source_kind: str = "parquet") -> None:
@@ -343,6 +368,20 @@ class OrbitSequenceDataset(IterableDataset):
         self.return_event_metadata = return_event_metadata
         self._iteration = 0
 
+    def _prepare_iteration(
+        self, worker_info, rng: Optional[np.random.Generator]
+    ) -> Optional[list[int]]:
+        """Plan this epoch before reading; optionally return entries per worker.
+
+        Called once per iteration, before :meth:`_iter_source_batches`, with the
+        same ``rng``. A source that knows how many entries each DataLoader
+        worker will read returns those counts, and the event quota is then split
+        in proportion to them. ``None`` (the default) splits it evenly, which
+        under-fills the quota when it is close to the available events and the
+        workers' shares are unequal.
+        """
+        return None
+
     def _iter_source_batches(
         self, worker_info, rng: Optional[np.random.Generator]
     ) -> Iterator[tuple[ak.Array, str, np.ndarray]]:
@@ -369,14 +408,20 @@ class OrbitSequenceDataset(IterableDataset):
             if self.shuffle:
                 rng = np.random.default_rng(self.shuffle_seed + self._iteration)
                 self._iteration += 1
+            worker_entries = self._prepare_iteration(worker_info, rng)
             iteration_max_events = self.max_events
             if (
                 iteration_max_events is not None
                 and worker_info is not None
                 and self.partition_max_events_across_workers
             ):
-                base, remainder = divmod(iteration_max_events, worker_info.num_workers)
-                iteration_max_events = base + int(worker_info.id < remainder)
+                if worker_entries is None:
+                    base, remainder = divmod(iteration_max_events, worker_info.num_workers)
+                    iteration_max_events = base + int(worker_info.id < remainder)
+                else:
+                    iteration_max_events = proportional_quotas(
+                        iteration_max_events, worker_entries
+                    )[worker_info.id]
         except Exception:
             _log_worker_exception("failed during dataset iteration setup", self.source_kind)
             raise

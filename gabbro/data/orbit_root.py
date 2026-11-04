@@ -193,14 +193,59 @@ class OrbitRootDataset(OrbitSequenceDataset):
                 fields[column] = fields[column][order]
         return ak.zip(fields, depth_limit=1)
 
-    def _iter_source_batches(self, worker_info, rng):
+    def _prepare_iteration(self, worker_info, rng):
+        """Plan this epoch's chunks and return the entries each worker will read.
+
+        Every worker builds the same plan (same files, seed and rng draws), so
+        each one knows all workers' shares and the event quota can be split in
+        proportion to them. Only tree metadata is read here.
+        """
         files = list(self.root_files)
         if rng is not None:
             rng.shuffle(files)
-        branches = list(dict.fromkeys(self.branch_for.values()))
-
+        num_workers = 1 if worker_info is None else worker_info.num_workers
+        worker_entries = [0] * num_workers
+        self._plan = []
         chunk_position = 0
         for file_path in files:
+            with uproot.open(file_path) as root_file:
+                num_entries = root_file[self.tree_name].num_entries
+            entry_ranges = split_entry_ranges(
+                num_entries,
+                self.entry_fraction,
+                block_size=self.split_block_size,
+                seed=self.split_seed,
+            )
+            if not entry_ranges:
+                warnings.warn(
+                    f"{file_path}: entry fraction {self.entry_fraction} selects no "
+                    f"entries ({num_entries} entries, "
+                    f"split_block_size={self.split_block_size})",
+                    stacklevel=2,
+                )
+            chunks = [
+                (chunk_start, min(chunk_start + self.step_size, stop))
+                for start, stop in entry_ranges
+                for chunk_start in range(start, stop, self.step_size)
+            ]
+            if rng is not None:
+                rng.shuffle(chunks)
+            # Chunks are dealt round-robin over workers, counted across files.
+            assigned = []
+            for chunk_start, chunk_stop in chunks:
+                worker = chunk_position % num_workers
+                chunk_position += 1
+                worker_entries[worker] += chunk_stop - chunk_start
+                if worker_info is None or worker == worker_info.id:
+                    assigned.append((chunk_start, chunk_stop))
+            self._plan.append((file_path, assigned))
+        return None if worker_info is None else worker_entries
+
+    def _iter_source_batches(self, worker_info, rng):
+        branches = list(dict.fromkeys(self.branch_for.values()))
+        for file_path, chunks in self._plan:
+            if not chunks:
+                continue
             chunk_start = None
             try:
                 with uproot.open(file_path) as root_file:
@@ -208,35 +253,7 @@ class OrbitRootDataset(OrbitSequenceDataset):
                     missing = sorted(set(branches) - set(tree.keys()))
                     if missing:
                         raise KeyError(f"{file_path}:{self.tree_name} has no branches {missing}")
-                    entry_ranges = split_entry_ranges(
-                        tree.num_entries,
-                        self.entry_fraction,
-                        block_size=self.split_block_size,
-                        seed=self.split_seed,
-                    )
-                    if not entry_ranges:
-                        warnings.warn(
-                            f"{file_path}: entry fraction {self.entry_fraction} selects no "
-                            f"entries ({tree.num_entries} entries, "
-                            f"split_block_size={self.split_block_size})",
-                            stacklevel=2,
-                        )
-                    chunks = [
-                        (chunk_start, min(chunk_start + self.step_size, stop))
-                        for start, stop in entry_ranges
-                        for chunk_start in range(start, stop, self.step_size)
-                    ]
-                    if rng is not None:
-                        rng.shuffle(chunks)
-
                     for chunk_start, chunk_stop in chunks:
-                        assigned_to_worker = (
-                            worker_info is None
-                            or chunk_position % worker_info.num_workers == worker_info.id
-                        )
-                        chunk_position += 1
-                        if not assigned_to_worker:
-                            continue
                         batch = self._to_internal(
                             tree.arrays(branches, entry_start=chunk_start, entry_stop=chunk_stop)
                         )
