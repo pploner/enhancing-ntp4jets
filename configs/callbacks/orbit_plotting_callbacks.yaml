@@ -15,8 +15,26 @@ model_checkpoint:
   dirpath: ${paths.output_dir}/checkpoints
   filename: best
   save_top_k: 1
-  save_last: true
+  # last.ckpt comes from model_checkpoint_epoch below: with save_top_k=1 this
+  # callback only rewrites last.ckpt when val_loss improves (= best.ckpt).
+  save_last: false
   auto_insert_metric_name: false
+
+# Keep every epoch locally (~20 MB each) and a true last.ckpt for resuming.
+# Only best.ckpt and the newest checkpoint are uploaded to W&B (see
+# configs/logger/wandb.yaml).
+model_checkpoint_epoch:
+  _target_: gabbro.callbacks.checkpoint_callback.CustomModelCheckpoint
+  state_key: "Epoch-checkpoint-callback"
+  dirpath: ${paths.output_dir}/checkpoints
+  filename: "epoch_{epoch:03d}"
+  monitor: null
+  save_top_k: -1
+  save_last: true
+  every_n_epochs: 1
+  auto_insert_metric_name: false
+  save_on_train_epoch_end: false
+  verbose: false
 
 early_stopping:
   monitor: val_loss

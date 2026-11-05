@@ -1,16 +1,18 @@
 # https://wandb.ai
 
 wandb:
-  _target_: lightning.pytorch.loggers.wandb.WandbLogger
+  _target_: gabbro.utils.wandb_logger.BestAndLatestWandbLogger
   name: ${task_name}
   save_dir: "${paths.output_dir}"
   offline: False
   id: null # pass correct id to resume experiment!
   anonymous: null # enable anonymous logging
   project: "deep-learning"
-  # Upload best.ckpt when it improves and each updated last.ckpt while training.
-  # This keeps long/preemptible runs recoverable before they finish.
-  log_model: "all"
+  # Upload at most two checkpoints per run, "best" and "latest", once when
+  # training ends (also on Ctrl+C / crash). Local checkpoints are unaffected.
+  # "all" would upload them on every change (more W&B storage). See
+  # gabbro/utils/wandb_logger.py.
+  log_model: true
   prefix: "" # a string to put at the beginning of metric keys
   # entity: "" # set to name of your wandb team
   group: ""
