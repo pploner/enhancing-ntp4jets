@@ -1,23 +1,62 @@
 # @package _global_
 
-# Phase-2 L1 ROOT TT sample with the puppi128 VQ-4096 model and the team's 5M
-# campaign recipe (alpha 10, constant LR 1e-4, 256-event physical batches), for
-# comparison with orbit_campaign_puppi128_tt_vq4096_5m on collide-2v.
-# Note: TT has only 188,160 training events per epoch (vs 5M), so 30 epochs
-# are far fewer optimizer steps than the 5M runs.
-
 defaults:
-  - orbit_campaign_puppi128_sm_vq4096
+  - override /feature_dict: feature_dict_orbit_absolute.yaml
   - override /data: orbit_root_tt.yaml
+  - override /model: model_vqvae_transformer.yaml
+  - override /callbacks: orbit_plotting_callbacks.yaml
+  - override /logger: wandb.yaml
+  - override /trainer: gpu.yaml
   - _self_
 
 project_name: orbit-root-tt-vq4096
-task_name: orbit_root_tt_vq4096
+task_name: orbit-root-tt-vq4096
 tags: [orbit, root, phase2-l1, tt, particle, puppiw-0p05, vq-ste, codes-4096, alpha-10, lr-1e-4, constant-lr]
+train: true
+test: false
 
 model:
+  # Bound retained plotting data while metrics continue to stream over the full
+  # test suites. 40 x 256 = 10,240 representative events per suite.
+  max_test_plot_batches: 40
   model_kwargs:
+    input_dim: 4
+    max_sequence_len: 128
     alpha: 10
+    vq_kwargs:
+      num_codes: 4096
+      rotation_tr: false
   optimizer:
     lr: 1e-4
   scheduler: null
+
+data:
+   eta_scale: 2.5
+   pt_shift: 1.0 
+
+
+trainer:
+  max_epochs: 30
+  enable_checkpointing: true
+  # Keep the 256-event batch physical: no gradient micro-batching.
+  accumulate_grad_batches: 1
+  
+
+callbacks:
+  orbit_plotting_callback:
+    jet_min_pt: 30.0
+    include_tau32: false
+    cache_subset_jet_results: true
+    validation_plot_every_n_epochs: 5
+    include_codebook_histogram: false
+
+extras:
+  enforce_tags: false
+  print_config: true
+
+  # log_model can be 'all' to save checkpoints while training or 'true' to save them at the end of training
+logger:
+  wandb:
+    entity: "giorgettisab-cern"
+    log_model: "all"
+    project: "orbit-cms"
