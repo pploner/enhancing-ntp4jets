@@ -22,6 +22,15 @@ data:
   eta_scale: 1.35764
   pt_shift: 1.41455
 
+# Run to convergence (early stopping on val_loss, patience 4), as in the
+# 512/4096/8192 codebook-size comparison. Every epoch is kept locally, so a
+# fixed-budget comparison (e.g. epoch_029.ckpt) stays possible afterwards.
+trainer:
+  max_epochs: 150
+
 logger:
   wandb:
     group: tt-vq4096-preproc-scan
+    # Upload only best + latest once at the end of training (also on Ctrl+C or
+    # a crash, not on a hard kill / pod deletion); all epochs stay on disk.
+    log_model: true
