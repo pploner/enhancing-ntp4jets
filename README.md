@@ -1,4 +1,5 @@
-# ORBIT TokenizerThis repository combines three related codebases:
+# ORBIT Tokenizer
+This repository combines three related codebases:
 - the Hydra and Lightning training pipeline from [`enhancing-ntp4jets`](https://github.com/uhh-pd-ml/enhancing-ntp4jets/tree/main);
 - the event-level jet tokenization use case from the [L1T tokenizer repo](https://github.com/philiw/vq-tokenizer-l1t);
 - the parquet loader, split-quantizer architecture, and selected plotting
