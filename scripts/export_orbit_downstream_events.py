@@ -27,6 +27,7 @@ from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from tqdm.auto import tqdm
 
+from gabbro.data.orbit_transforms import KinematicTransform
 from gabbro.data.orbit_downstream import (
     FIVE_CLASS_GROUPS,
     FIVE_CLASS_TO_LABEL,
@@ -139,6 +140,7 @@ def build_data_module(
     mask_min_value: float,
     pid_enabled: bool,
     split_budgets: dict[str, int],
+    kinematics: KinematicTransform,
 ):
     train_specs = {}
     test_specs = {}
@@ -183,6 +185,7 @@ def build_data_module(
         pid_cfg={"enabled": pid_enabled, "num_classes": 8},
         return_raw_features=True,
         return_event_metadata=True,
+        **kinematics.as_kwargs(),
     )
     if dict(module.hparams.group_to_label) != FIVE_CLASS_TO_LABEL:
         raise ValueError("Canonical loader generated an unexpected class-label mapping")
@@ -215,15 +218,9 @@ def decode_batch(model, batch, device, pid_enabled: bool):
     )
 
 
-def transformed_to_physical(values: np.ndarray) -> np.ndarray:
-    return np.stack(
-        [
-            values[..., 0] * 3.0,
-            np.arctan2(values[..., 2], values[..., 1]),
-            np.clip(np.exp(values[..., 3] + 1.8) - 1e-8, 0.0, None),
-        ],
-        axis=-1,
-    )
+def transformed_to_physical(values: np.ndarray, transform: KinematicTransform) -> np.ndarray:
+    """Undo the run's kinematic preprocessing: ``[..., >=4]`` -> ``[eta, phi, pT]``."""
+    return transform.to_physical(values)
 
 
 def prepare_test_time_baseline(model, data_module, output_dir: Path):
@@ -251,7 +248,9 @@ def write_shard(split_dir: Path, shard_index: int, rows: dict[str, list]):
     return path
 
 
-def export_split(model, loader, split, output_dir, device, budget, events_per_shard, pid_enabled):
+def export_split(
+    model, loader, split, output_dir, device, budget, events_per_shard, pid_enabled, kinematics
+):
     split_dir = output_dir / split
     split_dir.mkdir(parents=True, exist_ok=False)
     columns = {
@@ -271,7 +270,7 @@ def export_split(model, loader, split, output_dir, device, budget, events_per_sh
     with tqdm(total=budget, desc=f"Exporting {split}", unit="event") as progress:
         for batch in loader:
             reconstructed, decoded_pid, mask = decode_batch(model, batch, device, pid_enabled)
-            decoded_physical = transformed_to_physical(reconstructed)
+            decoded_physical = transformed_to_physical(reconstructed, kinematics)
             raw = batch["raw_part_features"]
             source_rows = batch["source_rows"].numpy()
             labels = batch["jet_type_labels"].numpy()
@@ -333,6 +332,7 @@ def main():
         checkpoint_data_settings(cfg)
     )
     batch_size = args.batch_size or (16 if max_sequence_length > 128 else 256)
+    kinematics = KinematicTransform.from_data_config(cfg.data)
     data_module, manifest_hashes = build_data_module(
         args.manifest_dir.resolve(),
         batch_size,
@@ -342,6 +342,7 @@ def main():
         mask_min_value,
         pid_enabled,
         split_budgets,
+        kinematics,
     )
     prepare_test_time_baseline(model, data_module, args.output_dir)
     loaders = {
@@ -359,6 +360,7 @@ def main():
             split_budgets[split],
             args.events_per_shard,
             pid_enabled,
+            kinematics,
         )
         for split, loader in loaders.items()
     }

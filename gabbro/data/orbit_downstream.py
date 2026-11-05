@@ -39,6 +39,9 @@ def physical_particles_to_classifier_features(
         axis=1,
     )
     values = np.asarray(ak.to_numpy(padded), dtype=np.float32)
+    # The classifier's own fixed input transform, deliberately independent of
+    # the tokenizer's data.eta_scale/pt_shift: inputs here are already physical,
+    # and a fixed transform keeps classifiers comparable across tokenizer runs.
     transformed = np.stack(
         [
             values[..., 0] / 3.0,

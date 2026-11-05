@@ -13,6 +13,7 @@ import fastjet
 import vector
 from scipy.optimize import linear_sum_assignment
 
+from gabbro.data.orbit_transforms import KinematicTransform
 from gabbro.plotting.orbit import (
     CodeBranchSpec,
     MINBIAS_PHYSICAL_FEATURE_RANGES,
@@ -306,7 +307,12 @@ class OrbitPlottingCallback(L.Callback):
         reconstructed_flat = x_reco[suite_selector][selected_mask]
         pid_flat = np.asarray(pid)[suite_selector][selected_mask]
         feature_names = self._feature_names(trainer, pl_module)
-        residuals = pid_residual_arrays(original_flat, reconstructed_flat, feature_names)
+        residuals = pid_residual_arrays(
+            original_flat,
+            reconstructed_flat,
+            feature_names,
+            eta_scale=self._kinematic_transform(trainer).eta_scale,
+        )
         class_names = tuple(
             getattr(getattr(pl_module, "model", None), "pid_class_names", ())
         )
@@ -445,11 +451,13 @@ class OrbitPlottingCallback(L.Callback):
                 feature_names,
                 mse_per_feature=mse_per_feature,
                 title=f"{stage.capitalize()} {suite_label} stored-jet reconstruction",
+                kinematics=self._kinematic_transform(trainer),
             ),
             f"{namespace}/jet_tokens/orbit_reconstruction_residuals": plot_residual_histograms(
                 histograms,
                 feature_names,
                 title=f"{stage.capitalize()} {suite_label} stored-jet residuals",
+                kinematics=self._kinematic_transform(trainer),
             ),
         }
         suffix = "" if suite_name is None else f"_{suite_name}"
@@ -645,13 +653,15 @@ class OrbitPlottingCallback(L.Callback):
             )
         return radii, "class-specific"
 
-    def _to_physical_features(self, x: np.ndarray) -> np.ndarray:
-        """Convert `[eta/3, cos(phi), sin(phi), log(pT)-1.8]` to `[eta, phi, pT]`."""
-        eta = x[..., 0] * 3.0
-        phi = np.arctan2(x[..., 2], x[..., 1])
-        pt = np.exp(x[..., 3] + 1.8) - 1e-8
-        pt = np.clip(pt, a_min=0.0, a_max=None)
-        return np.stack([eta, phi, pt], axis=-1)
+    @staticmethod
+    def _kinematic_transform(trainer) -> KinematicTransform:
+        return KinematicTransform.from_data_config(
+            getattr(getattr(trainer, "datamodule", None), "hparams", None)
+        )
+
+    def _to_physical_features(self, trainer, x: np.ndarray) -> np.ndarray:
+        """Convert `[eta/eta_scale, cos(phi), sin(phi), log(pT)-pt_shift]` to `[eta, phi, pT]`."""
+        return self._kinematic_transform(trainer).to_physical(x)
 
     def _collect_missing_transverse_energy(
         self,
@@ -1139,8 +1149,8 @@ class OrbitPlottingCallback(L.Callback):
                 and self._data_level(trainer) == "particle"
             ):
                 suite_indices = np.flatnonzero(suite_selector)
-                suite_x_physical = self._to_physical_features(x_original[suite_selector])
-                suite_x_reco_physical = self._to_physical_features(x_reco[suite_selector])
+                suite_x_physical = self._to_physical_features(trainer, x_original[suite_selector])
+                suite_x_reco_physical = self._to_physical_features(trainer, x_reco[suite_selector])
                 suite_jet_radii, _ = self._jet_radii_for_group(
                     trainer,
                     "all",
@@ -1164,8 +1174,8 @@ class OrbitPlottingCallback(L.Callback):
                     event_groups.append(
                         (
                             class_name,
-                            self._to_physical_features(x_original[event_selector][:limit]),
-                            self._to_physical_features(x_reco[event_selector][:limit]),
+                            self._to_physical_features(trainer, x_original[event_selector][:limit]),
+                            self._to_physical_features(trainer, x_reco[event_selector][:limit]),
                             mask[event_selector][:limit],
                         )
                     )
@@ -1302,11 +1312,13 @@ class OrbitPlottingCallback(L.Callback):
                 feature_names,
                 mse_per_feature=mse_per_feature,
                 title=f"{stage.capitalize()} {display_name} ORBIT reconstruction features",
+                kinematics=self._kinematic_transform(trainer),
             ),
             f"{namespace}/{group_name}/orbit_reconstruction_residuals": plot_residual_histograms(
                 histograms,
                 feature_names,
                 title=f"{stage.capitalize()} {display_name} ORBIT reconstruction residuals",
+                kinematics=self._kinematic_transform(trainer),
             ),
         }
         if self.include_codebook_histogram and num_codes is not None:
@@ -1316,8 +1328,8 @@ class OrbitPlottingCallback(L.Callback):
             )
         if self.enable_physics_plots:
             data_level = self._data_level(trainer)
-            x_physical = self._to_physical_features(x_original)
-            x_reco_physical = self._to_physical_features(x_reco)
+            x_physical = self._to_physical_features(trainer, x_original)
+            x_reco_physical = self._to_physical_features(trainer, x_reco)
             x_physical_flat = x_physical[mask]
             x_reco_physical_flat = x_reco_physical[mask]
             finite = np.all(np.isfinite(x_physical_flat), axis=1) & np.all(

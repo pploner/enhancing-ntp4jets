@@ -19,6 +19,12 @@ import numpy as np
 import torch
 from torch.utils.data import IterableDataset, get_worker_info
 
+from gabbro.data.orbit_transforms import (
+    DEFAULT_ETA_SCALE,
+    DEFAULT_PT_SHIFT,
+    KinematicTransform,
+)
+
 
 SEQUENCE_SCHEMAS = {
     "particle": {
@@ -180,7 +186,12 @@ class OrbitPreprocessor:
         epsilon: float = 1e-8,
         include_energy: bool = False,
         energy_shift: float = 2.5,
+        eta_scale: float = DEFAULT_ETA_SCALE,
+        pt_shift: float = DEFAULT_PT_SHIFT,
     ):
+        self.kinematics = KinematicTransform(
+            eta_scale=float(eta_scale), pt_shift=float(pt_shift), epsilon=epsilon
+        )
         self.eta_column = f"{feature_prefix}_Eta"
         self.phi_column = f"{feature_prefix}_Phi"
         self.pt_column = f"{feature_prefix}_PT"
@@ -205,12 +216,14 @@ class OrbitPreprocessor:
         return features
 
     def forward(self, array: ak.Array) -> ak.Array:
-        array = ak.with_field(array, array[self.eta_column] / 3, self.eta_column)
+        array = ak.with_field(
+            array, self.kinematics.eta_forward(array[self.eta_column]), self.eta_column
+        )
         array = ak.with_field(array, np.cos(array[self.phi_column]), f"{self.phi_column}_cos")
         array = ak.with_field(array, np.sin(array[self.phi_column]), f"{self.phi_column}_sin")
         array = ak.with_field(
             array,
-            np.log(array[self.pt_column] + self.epsilon) - 1.8,
+            self.kinematics.pt_forward(array[self.pt_column]),
             self.pt_column,
         )
         if self.include_energy:
@@ -257,6 +270,8 @@ class OrbitSequenceDataset(IterableDataset):
         pid_cfg: Optional[Mapping] = None,
         include_energy: bool = False,
         energy_shift: float = 2.5,
+        eta_scale: float = DEFAULT_ETA_SCALE,
+        pt_shift: float = DEFAULT_PT_SHIFT,
         auxiliary_jet_sequence_type: Optional[str] = None,
         max_auxiliary_jets: int = 5,
     ):
@@ -280,6 +295,8 @@ class OrbitSequenceDataset(IterableDataset):
             schema["prefix"],
             include_energy=include_energy,
             energy_shift=energy_shift,
+            eta_scale=eta_scale,
+            pt_shift=pt_shift,
         )
         self.features = list(self.preprocessor.input_features)
         if auxiliary_jet_sequence_type is not None:
@@ -298,6 +315,10 @@ class OrbitSequenceDataset(IterableDataset):
                 auxiliary_schema["prefix"],
                 include_energy=False,
                 energy_shift=energy_shift,
+                # Jets are concatenated with particles in the model input, so
+                # they must share the particle feature transform.
+                eta_scale=eta_scale,
+                pt_shift=pt_shift,
             )
             self.features.extend(self.auxiliary_jet_preprocessor.input_features)
         else:

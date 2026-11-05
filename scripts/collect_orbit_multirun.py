@@ -31,6 +31,7 @@ except ImportError:
     DictConfig = dict
     OmegaConf = None
 
+from gabbro.data.orbit_transforms import KinematicTransform
 from gabbro.plotting.orbit import (
     PRESENTATION_CODEBOOK_MARKER_AREA_SCALE,
     multirun_color,
@@ -348,6 +349,7 @@ def _collect_record(
             "FAISS k-means" if metadata["quantizer_family"] == "kmeans" else None
         ),
         "seed": int(_cfg_get(cfg, "seed", 0)),
+        **KinematicTransform.from_data_config(_select(cfg, "data")).as_kwargs(),
         "wandb_project": _select(cfg, "logger.wandb.project"),
         "wandb_group": _select(cfg, "logger.wandb.group"),
         **metadata,
@@ -544,6 +546,29 @@ def _compression_ratio_figure(
     return figure
 
 
+def _common_kinematics(records: list[dict[str, Any]]) -> KinematicTransform | None:
+    """The runs' shared kinematic transform, or None if they differ.
+
+    Transformed-space eta/pT values of runs with different ``data.eta_scale`` /
+    ``data.pt_shift`` live in different units, so they must not be overlaid.
+    """
+    transforms = {KinematicTransform.from_data_config(record) for record in records}
+    if len(transforms) == 1:
+        return transforms.pop()
+    print(
+        "WARNING: runs use different kinematic preprocessing "
+        f"({sorted((t.eta_scale, t.pt_shift) for t in transforms)} as (eta_scale, pt_shift)); "
+        "skipping transformed-space eta/pT plots. Compare the physical-unit plots instead."
+    )
+    return None
+
+
+def _is_transformed_eta_or_pt(feature_name: str) -> bool:
+    # Transformed inputs are named after the source column (L1T_*_Eta/_PT);
+    # physical_* histograms are in physical units and stay comparable.
+    return feature_name.startswith("L1T_") and feature_name.endswith(("_Eta", "_PT"))
+
+
 def _save_figures(
     records: list[dict[str, Any]],
     histogram_runs: list[dict],
@@ -555,6 +580,7 @@ def _save_figures(
     show_titles: bool = True,
     histogram_features: list[str] | None = None,
 ) -> None:
+    kinematics = _common_kinematics(records)
     figures = {
         "codebook_size_vs_reco_mse": plot_multirun_metric(
             records,
@@ -654,11 +680,13 @@ def _save_figures(
         "codebook_size_vs_transformed_mse_eta_scaled": plot_multirun_metric(
             records,
             "plot_metrics/transformed_mse_eta_scaled",
-            r"MSE $\eta/3$",
-            r"Codebook size vs. transformed $\eta/3$ MSE",
+            rf"MSE ${kinematics.eta_latex}$",
+            rf"Codebook size vs. transformed ${kinematics.eta_latex}$ MSE",
             log_y=True,
             show_title=show_titles,
-        ),
+        )
+        if kinematics is not None
+        else None,
         "codebook_size_vs_transformed_mse_cos_phi": plot_multirun_metric(
             records,
             "plot_metrics/transformed_mse_cos_phi",
@@ -678,11 +706,13 @@ def _save_figures(
         "codebook_size_vs_transformed_mse_log_pt_shifted": plot_multirun_metric(
             records,
             "plot_metrics/transformed_mse_log_pt_shifted",
-            r"MSE $\log(p_T)-1.8$",
-            r"Codebook size vs. transformed $\log(p_T)-1.8$ MSE",
+            rf"MSE ${kinematics.log_pt_latex}$",
+            rf"Codebook size vs. transformed ${kinematics.log_pt_latex}$ MSE",
             log_y=True,
             show_title=show_titles,
-        ),
+        )
+        if kinematics is not None
+        else None,
         "codebook_size_vs_physical_mse_eta": plot_multirun_metric(
             records,
             "plot_metrics/physical_mse_eta",
@@ -725,12 +755,15 @@ def _save_figures(
             if histogram_features
             else sorted(common_features)
         )
+        if kinematics is None:
+            feature_names = [name for name in feature_names if not _is_transformed_eta_or_pt(name)]
         if feature_names:
             figures["combined_reconstruction_features"] = plot_multirun_feature_histograms(
                 histogram_runs,
                 feature_names,
                 figsize_per_axis=(7.0, 5.2),
                 show_titles=show_titles,
+                kinematics=kinematics,
             )
         common_residual_features = set(_histogram_residual_features(histogram_runs[0]["histograms"]))
         for run in histogram_runs[1:]:
@@ -740,11 +773,16 @@ def _save_figures(
             if histogram_features
             else sorted(common_residual_features)
         )
+        if kinematics is None:
+            residual_feature_names = [
+                name for name in residual_feature_names if not _is_transformed_eta_or_pt(name)
+            ]
         if residual_feature_names:
             figures["combined_reconstruction_residuals"] = plot_multirun_residual_histograms(
                 histogram_runs,
                 residual_feature_names,
                 show_titles=show_titles,
+                kinematics=kinematics,
             )
     output_dir.mkdir(parents=True, exist_ok=True)
     for name, figure in figures.items():

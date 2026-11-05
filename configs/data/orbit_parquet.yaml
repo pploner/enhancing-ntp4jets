@@ -44,6 +44,10 @@ shuffle_seed: 42
 mask_column: null
 mask_min_value: null
 min_pt: null
+# Kinematic preprocessing: eta -> eta / eta_scale, pT -> log(pT) - pt_shift.
+# eta_scale also sets the relative MSE weight of eta (1 / eta_scale^2).
+eta_scale: 3.0
+pt_shift: 1.8
 
 # ORBIT parquet samples do not contain JetClass category labels.
 jet_type_label: 0

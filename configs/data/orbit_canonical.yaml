@@ -9,6 +9,10 @@ sequence_type: particle
 pid_cfg: ${pid}
 include_energy: false
 energy_shift: 2.5
+# Kinematic preprocessing: eta -> eta / eta_scale, pT -> log(pT) - pt_shift.
+# eta_scale also sets the relative MSE weight of eta (1 / eta_scale^2).
+eta_scale: 3.0
+pt_shift: 1.8
 max_sequence_length: null
 batch_size: 256
 num_workers: 4

@@ -31,6 +31,7 @@ from gabbro.data.orbit_common import (  # noqa: F401  (re-exported)
     map_pdg_charge_to_pid_class,
     resolve_process_quotas,
 )
+from gabbro.data.orbit_transforms import DEFAULT_ETA_SCALE, DEFAULT_PT_SHIFT
 
 PARQUET_SUFFIXES = {".parquet"}
 
@@ -206,6 +207,8 @@ class OrbitParquetDataModule(L.LightningDataModule):
         pid_cfg: Optional[dict] = None,
         include_energy: bool = False,
         energy_shift: float = 2.5,
+        eta_scale: float = DEFAULT_ETA_SCALE,
+        pt_shift: float = DEFAULT_PT_SHIFT,
         auxiliary_jet_sequence_type: Optional[str] = None,
         max_auxiliary_jets: int = 5,
         **kwargs,
@@ -335,6 +338,8 @@ class OrbitParquetDataModule(L.LightningDataModule):
             SEQUENCE_SCHEMAS[sequence_type]["prefix"],
             include_energy=include_energy,
             energy_shift=energy_shift,
+            eta_scale=eta_scale,
+            pt_shift=pt_shift,
         ).output_features
         self.save_hyperparameters(ignore=["parquet_files_train", "parquet_files_val"])
         self.hparams["selected_features"] = self.selected_features
@@ -599,6 +604,8 @@ class OrbitParquetDataModule(L.LightningDataModule):
             pid_cfg=self.hparams.get("pid_cfg"),
             include_energy=self.hparams.include_energy,
             energy_shift=self.hparams.energy_shift,
+            eta_scale=self.hparams.get("eta_scale", DEFAULT_ETA_SCALE),
+            pt_shift=self.hparams.get("pt_shift", DEFAULT_PT_SHIFT),
             auxiliary_jet_sequence_type=self.hparams.auxiliary_jet_sequence_type,
             max_auxiliary_jets=self.hparams.max_auxiliary_jets,
         )

@@ -28,6 +28,7 @@ from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from tqdm.auto import tqdm
 
+from gabbro.data.orbit_transforms import KinematicTransform
 from gabbro.callbacks.orbit_plotting_callback import (
     OrbitPlottingCallback,
     match_jets_by_delta_r,
@@ -91,15 +92,9 @@ def checkpoint_data_settings(cfg):
     return sequence_type, max_length, mask_column, float(mask_min_value)
 
 
-def to_physical(values: np.ndarray) -> np.ndarray:
-    return np.stack(
-        (
-            values[..., 0] * 3.0,
-            np.arctan2(values[..., 2], values[..., 1]),
-            np.clip(np.exp(values[..., 3] + 1.8) - 1e-8, 0.0, None),
-        ),
-        axis=-1,
-    )
+def to_physical(values: np.ndarray, transform: KinematicTransform) -> np.ndarray:
+    """Undo the run's kinematic preprocessing: ``[..., >=4]`` -> ``[eta, phi, pT]``."""
+    return transform.to_physical(values)
 
 
 def reconstruct_jets(values: np.ndarray, radius: float, min_pt: float):
@@ -245,6 +240,7 @@ def main() -> None:
         pid_cfg=cfg.get("pid"),
         include_energy=bool(cfg.data.get("include_energy", False)),
         energy_shift=float(cfg.data.get("energy_shift", 2.5)),
+        **KinematicTransform.from_data_config(cfg.data).as_kwargs(),
     )
 
     if args.reuse_tau32_cache is not None:
@@ -264,6 +260,7 @@ def main() -> None:
     decoded_jets = 0
     processed_events = 0
     started = time.perf_counter()
+    kinematics = KinematicTransform.from_data_config(cfg.data)
     with tqdm(total=args.events, desc="Evaluating boosted all-hadronic tt", unit="event") as bar:
         for batch in dataset:
             features = batch["part_features"].to(device)
@@ -273,8 +270,8 @@ def main() -> None:
                 pid = pid.to(device)
             with torch.inference_mode():
                 reconstructed, _ = model(features, mask_tensor, pid_particle=pid)
-            original = to_physical(features.detach().cpu().numpy())
-            decoded = to_physical(reconstructed.detach().cpu().numpy())
+            original = to_physical(features.detach().cpu().numpy(), kinematics)
+            decoded = to_physical(reconstructed.detach().cpu().numpy(), kinematics)
             mask = mask_tensor.detach().cpu().numpy().astype(bool)
 
             for event_index in range(len(mask)):

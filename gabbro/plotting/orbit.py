@@ -19,6 +19,7 @@ from matplotlib.lines import Line2D
 from matplotlib.colors import Normalize
 
 import gabbro.plotting.utils as plot_utils
+from gabbro.data.orbit_transforms import DEFAULT_ETA_SCALE
 
 ORIGINAL_COLOR = plot_utils.DEFAULT_COLORS[0]
 RECONSTRUCTED_COLOR = plot_utils.DEFAULT_COLORS[1]
@@ -84,8 +85,13 @@ def pid_residual_arrays(
     original: np.ndarray,
     reconstructed: np.ndarray,
     feature_names: list[str] | tuple[str, ...],
+    eta_scale: float = DEFAULT_ETA_SCALE,
 ) -> dict[str, np.ndarray]:
-    """Return same-position residuals in physical angular/log coordinates."""
+    """Return same-position residuals in physical angular/log coordinates.
+
+    ``eta_scale`` must match the run's ``data.eta_scale`` so that ``delta_eta``
+    is in physical units. ``delta_log_pt`` does not depend on ``pt_shift``.
+    """
     original = np.asarray(original)
     reconstructed = np.asarray(reconstructed)
     if original.shape != reconstructed.shape or original.ndim != 2:
@@ -111,7 +117,7 @@ def pid_residual_arrays(
     )
     delta_phi = np.remainder(reconstructed_phi - original_phi + np.pi, 2 * np.pi) - np.pi
     residuals = {
-        "delta_eta": 3.0 * (reconstructed[:, eta] - original[:, eta]),
+        "delta_eta": eta_scale * (reconstructed[:, eta] - original[:, eta]),
         "delta_phi": delta_phi,
         "delta_log_pt": reconstructed[:, pt] - original[:, pt],
     }
@@ -378,7 +384,7 @@ def _set_suptitle(fig, title, **kwargs) -> None:
         fig.suptitle(title, **kwargs)
 
 
-def _feature_label(feature_name: str) -> str:
+def _feature_label(feature_name: str, kinematics=None) -> str:
     physical_labels = {
         "physical_pT": r"$p_T$ [GeV]",
         "physical_Eta": r"$\eta$",
@@ -386,7 +392,7 @@ def _feature_label(feature_name: str) -> str:
     }
     if feature_name in physical_labels:
         return physical_labels[feature_name]
-    return plot_utils.DEFAULT_LABELS.get(feature_name, feature_name)
+    return plot_utils.orbit_feature_label(feature_name, kinematics)
 
 
 def _clean_feature_name(feature_name: str) -> str:
@@ -1036,6 +1042,7 @@ def plot_feature_histograms(
     feature_names: list[str],
     mse_per_feature: np.ndarray | None = None,
     title: str = "Original vs. reconstructed features",
+    kinematics=None,
 ):
     plot_utils.set_mpl_style()
     fig, axes = _grid(len(feature_names))
@@ -1061,8 +1068,8 @@ def plot_feature_histograms(
         metric = ""
         if mse_per_feature is not None:
             metric = f" (MSE: {mse_per_feature[i]:.4g})"
-        _set_title(ax, f"{_feature_label(feature_name)}{metric}")
-        ax.set_xlabel(_feature_label(feature_name))
+        _set_title(ax, f"{_feature_label(feature_name, kinematics)}{metric}")
+        ax.set_xlabel(_feature_label(feature_name, kinematics))
         ax.set_ylabel("Density")
         ax.legend()
         if feature_name.lower() in {"pt", "p_t"} or feature_name.endswith("_PT"):
@@ -1077,6 +1084,7 @@ def plot_residual_histograms(
     histograms: dict[str, np.ndarray],
     feature_names: list[str],
     title: str = "Reconstructed minus original",
+    kinematics=None,
 ):
     plot_utils.set_mpl_style()
     fig, axes = _grid(len(feature_names))
@@ -1096,8 +1104,8 @@ def plot_residual_histograms(
             linestyle=REFERENCE_LINE_STYLE,
             alpha=REFERENCE_LINE_ALPHA,
         )
-        _set_title(ax, _feature_label(feature_name))
-        ax.set_xlabel(f"Reco - original\n{_feature_label(feature_name)}")
+        _set_title(ax, _feature_label(feature_name, kinematics))
+        ax.set_xlabel(f"Reco - original\n{_feature_label(feature_name, kinematics)}")
         ax.set_ylabel("Density")
     for ax in axes[len(feature_names) :]:
         ax.axis("off")
@@ -1889,14 +1897,15 @@ def attention_delta_eta_phi_figure(
     valid: torch.Tensor,
     title: str,
     exclude_self: bool = False,
+    eta_scale: float = DEFAULT_ETA_SCALE,
 ):
     """Plot attention versus angular distance.
 
     For absolute ORBIT features this expects feature order
-    `[eta_scaled, cos(phi), sin(phi), pt_transformed]`.
+    `[eta / eta_scale, cos(phi), sin(phi), pt_transformed]`.
     """
     attn = weights.mean(dim=1)
-    eta = x[..., 0] * 3.0
+    eta = x[..., 0] * eta_scale
     phi = torch.atan2(x[..., 2], x[..., 1])
 
     deta = eta[:, :, None] - eta[:, None, :]
@@ -2012,6 +2021,7 @@ def plot_multirun_feature_histograms(
     title: str = "Reconstruction comparison",
     figsize_per_axis: tuple[float, float] = (5.0, 3.6),
     show_titles: bool = True,
+    kinematics=None,
 ):
     """Overlay reconstructed feature histograms from several runs."""
     hep = _multirun_mplhep()
@@ -2043,8 +2053,8 @@ def plot_multirun_feature_histograms(
                 linewidth=HISTOGRAM_LINEWIDTH,
             )
         if show_titles:
-            _set_title(ax, _feature_label(feature_name))
-        ax.set_xlabel(_feature_label(feature_name))
+            _set_title(ax, _feature_label(feature_name, kinematics))
+        ax.set_xlabel(_feature_label(feature_name, kinematics))
         ax.set_ylabel("Density")
         if _multirun_feature_uses_log_x(feature_name):
             ax.set_xscale("log")
@@ -2081,6 +2091,7 @@ def plot_multirun_residual_histograms(
     title: str = "Reconstruction residual comparison",
     show_titles: bool = True,
     figsize_per_axis: tuple[float, float] = (5.0, 5.6),
+    kinematics=None,
 ):
     """Overlay reconstructed-minus-original residuals from several runs."""
     hep = _multirun_mplhep()
@@ -2109,8 +2120,8 @@ def plot_multirun_residual_histograms(
         )
         ax.set_yscale("log", nonpositive="clip")
         if show_titles:
-            _set_title(ax, _feature_label(feature_name))
-        ax.set_xlabel(f"Reco - original\n{_feature_label(feature_name)}")
+            _set_title(ax, _feature_label(feature_name, kinematics))
+        ax.set_xlabel(f"Reco - original\n{_feature_label(feature_name, kinematics)}")
         ax.set_ylabel("Density")
         if show_titles:
             ax.legend(fontsize=MULTIRUN_LEGEND_FONTSIZE)

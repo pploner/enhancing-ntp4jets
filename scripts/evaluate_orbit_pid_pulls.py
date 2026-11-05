@@ -54,6 +54,7 @@ from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from tqdm.auto import tqdm
 
+from gabbro.data.orbit_transforms import KinematicTransform
 from gabbro.data.orbit_parquet import PID_CLASS_NAMES, SEQUENCE_SCHEMAS, OrbitParquetDataset
 from gabbro.plotting.orbit import (
     close_figure,
@@ -145,15 +146,9 @@ def checkpoint_data_settings(cfg) -> tuple[str, int, str | None, float]:
     return sequence_type, max_length, mask_column, float(mask_min_value)
 
 
-def to_physical(values: np.ndarray) -> np.ndarray:
-    return np.stack(
-        (
-            values[..., 0] * 3.0,
-            np.arctan2(values[..., 2], values[..., 1]),
-            np.clip(np.exp(values[..., 3] + 1.8) - 1e-8, 0.0, None),
-        ),
-        axis=-1,
-    )
+def to_physical(values: np.ndarray, transform: KinematicTransform) -> np.ndarray:
+    """Undo the run's kinematic preprocessing: ``[..., >=4]`` -> ``[eta, phi, pT]``."""
+    return transform.to_physical(values)
 
 
 def decode_batch(model, batch, device: torch.device) -> tuple[np.ndarray, np.ndarray]:
@@ -296,6 +291,7 @@ def main() -> None:
                         pid_cfg=cfg.get("pid"),
                         include_energy=bool(cfg.data.get("include_energy", False)),
                         energy_shift=float(cfg.data.get("energy_shift", 2.5)),
+                        **KinematicTransform.from_data_config(cfg.data).as_kwargs(),
                     ),
                 )
             )
@@ -325,7 +321,12 @@ def main() -> None:
     original_pid = np.concatenate(original_pid_chunks)
     decoded_pid = np.concatenate(decoded_pid_chunks)
     feature_names = list(cfg.get("feature_dict", {}).keys())
-    all_residuals = pid_residual_arrays(original, reconstructed, feature_names)
+    all_residuals = pid_residual_arrays(
+        original,
+        reconstructed,
+        feature_names,
+        eta_scale=KinematicTransform.from_data_config(cfg.data).eta_scale,
+    )
     by_pid = {
         pid: {key: values[original_pid == pid] for key, values in all_residuals.items()}
         for pid in range(len(PID_CLASS_NAMES))

@@ -27,6 +27,7 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 
+from gabbro.data.orbit_transforms import KinematicTransform
 from gabbro.data.orbit_parquet import OrbitParquetDataset
 from gabbro.utils.orbit_binary import (
     bits_for_size,
@@ -182,6 +183,7 @@ def build_dataset(cfg, manifest: Path, events: int, batch_size: int):
         pid_cfg=pid_cfg,
         include_energy=bool(cfg.data.get("include_energy", False)),
         energy_shift=float(cfg.data.get("energy_shift", 2.5)),
+        **KinematicTransform.from_data_config(cfg.data).as_kwargs(),
     )
 
 

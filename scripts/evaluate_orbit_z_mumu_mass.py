@@ -66,6 +66,7 @@ from scipy.optimize import curve_fit
 from scipy.optimize import linear_sum_assignment
 from tqdm.auto import tqdm
 
+from gabbro.data.orbit_transforms import KinematicTransform
 from gabbro.data.orbit_parquet import SEQUENCE_SCHEMAS, OrbitParquetDataset
 from gabbro.plotting.orbit import multirun_color
 from gabbro.plotting.utils import set_mpl_style
@@ -256,7 +257,7 @@ def checkpoint_energy_settings(cfg) -> tuple[bool, float]:
     )
 
 
-def decode_batch(model, batch, device: torch.device):
+def decode_batch(model, batch, device: torch.device, kinematics: KinematicTransform):
     features = batch["part_features"].to(device)
     mask = batch["part_mask"].to(device)
     pid = batch["part_pid"].to(device)
@@ -268,15 +269,7 @@ def decode_batch(model, batch, device: torch.device):
             pid_logits = outputs.get("pid_logits")
     if pid_logits is None:
         raise ValueError("PID-enabled checkpoint did not return decoded PID logits")
-    values = reconstructed.detach().cpu().numpy()
-    physical = np.stack(
-        [
-            values[..., 0] * 3.0,
-            np.arctan2(values[..., 2], values[..., 1]),
-            np.clip(np.exp(values[..., 3] + 1.8) - 1e-8, 0.0, None),
-        ],
-        axis=-1,
-    )
+    physical = kinematics.to_physical(reconstructed.detach().cpu().numpy())
     return physical, pid_logits.argmax(dim=-1).detach().cpu().numpy()
 
 
@@ -800,6 +793,7 @@ def evaluate_run(args, run_dir: Path, output_dir: Path):
     )
     sequence_type, max_sequence_length, mask_column, mask_min_value = checkpoint_data_settings(cfg)
     include_energy, energy_shift = checkpoint_energy_settings(cfg)
+    kinematics = KinematicTransform.from_data_config(cfg.data)
     batch_size = args.batch_size or (16 if max_sequence_length > 128 else 256)
     prepare_test_time_baseline(model, cfg, output_dir)
     dataset = OrbitParquetDataset(
@@ -814,6 +808,7 @@ def evaluate_run(args, run_dir: Path, output_dir: Path):
         pid_cfg=cfg.get("pid"),
         include_energy=include_energy,
         energy_shift=energy_shift,
+        **kinematics.as_kwargs(),
     )
 
     truth_reader = TruthReader() if args.candidate_mode == "truth" else None
@@ -828,7 +823,7 @@ def evaluate_run(args, run_dir: Path, output_dir: Path):
     }
     with tqdm(total=args.events, desc="Evaluating Z→μ⁺μ⁻", unit="event") as progress:
         for batch in dataset:
-            decoded, decoded_pid = decode_batch(model, batch, device)
+            decoded, decoded_pid = decode_batch(model, batch, device, kinematics)
             mask = batch["part_mask"].numpy().astype(bool)
             original_pid = batch["part_pid"].numpy()
             for index in range(mask.shape[0]):

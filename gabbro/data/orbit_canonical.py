@@ -20,6 +20,7 @@ from gabbro.data.orbit_common import (
     WeightedClassDataset,
     resolve_process_quotas,
 )
+from gabbro.data.orbit_transforms import DEFAULT_ETA_SCALE, DEFAULT_PT_SHIFT
 from gabbro.data.orbit_parquet import (
     PARQUET_SUFFIXES,
     OrbitParquetDataset,
@@ -92,6 +93,8 @@ class CanonicalOrbitDataModule(L.LightningDataModule):
         return_event_metadata: bool = False,
         include_energy: bool = False,
         energy_shift: float = 2.5,
+        eta_scale: float = DEFAULT_ETA_SCALE,
+        pt_shift: float = DEFAULT_PT_SHIFT,
         auxiliary_jet_sequence_type: Optional[str] = None,
         max_auxiliary_jets: int = 5,
         root: Optional[Mapping] = None,
@@ -216,6 +219,8 @@ class CanonicalOrbitDataModule(L.LightningDataModule):
             SEQUENCE_SCHEMAS[sequence_type]["prefix"],
             include_energy=include_energy,
             energy_shift=energy_shift,
+            eta_scale=eta_scale,
+            pt_shift=pt_shift,
         ).output_features
         self.selected_jet_features = (
             OrbitPreprocessor(
@@ -421,6 +426,8 @@ class CanonicalOrbitDataModule(L.LightningDataModule):
             pid_cfg=self.hparams.get("pid_cfg"),
             include_energy=self.hparams.include_energy,
             energy_shift=self.hparams.energy_shift,
+            eta_scale=self.hparams.get("eta_scale", DEFAULT_ETA_SCALE),
+            pt_shift=self.hparams.get("pt_shift", DEFAULT_PT_SHIFT),
             auxiliary_jet_sequence_type=self.hparams.auxiliary_jet_sequence_type,
             max_auxiliary_jets=self.hparams.max_auxiliary_jets,
         )

@@ -23,6 +23,7 @@ from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from tqdm.auto import tqdm
 
+from gabbro.data.orbit_transforms import KinematicTransform
 from gabbro.callbacks.orbit_plotting_callback import match_jets_by_delta_r
 from gabbro.data.orbit_parquet import OrbitParquetDataset, SEQUENCE_SCHEMAS
 from gabbro.plotting.orbit import (
@@ -143,6 +144,7 @@ def iter_batches(cfg, manifest_dir: Path, suite: str, events: int, batch_size: i
                 pid_cfg=cfg.get("pid"),
                 include_energy=bool(cfg.data.get("include_energy", False)),
                 energy_shift=float(cfg.data.get("energy_shift", 2.5)),
+                **KinematicTransform.from_data_config(cfg.data).as_kwargs(),
             )
             yield from dataset
 
@@ -167,6 +169,7 @@ def atomic_savez(path: Path, **values):
 
 
 def evaluate_general(spec, model, cfg, args, output: Path):
+    kinematics = KinematicTransform.from_data_config(cfg.data)
     originals, decoded = [], []
     jet_values = {name: [] for name in ("delta_pt", "delta_eta", "delta_phi", "match_dr")}
     pid_original, pid_residual = [], {name: [] for name in ("delta_eta", "delta_phi", "delta_log_pt")}
@@ -185,8 +188,8 @@ def evaluate_general(spec, model, cfg, args, output: Path):
         with torch.inference_mode():
             reco_t, codes_t, code_mask_t, pid_logits = decode(model, features, mask_t, pid_t)
         mask = mask_t.cpu().numpy().astype(bool)
-        original = to_physical(features.cpu().numpy())
-        reco = to_physical(reco_t.cpu().numpy())
+        original = to_physical(features.cpu().numpy(), kinematics)
+        reco = to_physical(reco_t.cpu().numpy(), kinematics)
         flat_original, flat_reco = original[mask], reco[mask]
         originals.append(flat_original.astype(np.float32))
         decoded.append(flat_reco.astype(np.float32))
@@ -215,6 +218,7 @@ def evaluate_general(spec, model, cfg, args, output: Path):
                 features.cpu().numpy()[mask],
                 reco_t.cpu().numpy()[mask],
                 feature_names,
+                eta_scale=kinematics.eta_scale,
             )
             pid_original.append(pids.astype(np.int8))
             for key in pid_residual:
@@ -268,6 +272,7 @@ def evaluate_general(spec, model, cfg, args, output: Path):
 
 
 def evaluate_tau(spec, model, cfg, args, output: Path):
+    kinematics = KinematicTransform.from_data_config(cfg.data)
     values = {name: [] for name in ("original_tau32", "decoded_tau32", "match_dr", "original_count", "decoded_count")}
     bar = tqdm(total=args.events, desc=f"{spec['id']} tau32", unit="event")
     for batch in iter_batches(cfg, args.manifest_dir, "tau32", args.events, args.batch_size):
@@ -279,7 +284,8 @@ def evaluate_tau(spec, model, cfg, args, output: Path):
         with torch.inference_mode():
             reco_t, _, _, _ = decode(model, features, mask_t, pid_t)
         mask = mask_t.cpu().numpy().astype(bool)
-        original, reco = to_physical(features.cpu().numpy()), to_physical(reco_t.cpu().numpy())
+        original = to_physical(features.cpu().numpy(), kinematics)
+        reco = to_physical(reco_t.cpu().numpy(), kinematics)
         for event in range(len(mask)):
             oj = reconstruct_jets(original[event, mask[event]], 0.8, 30.0)
             dj = reconstruct_jets(reco[event, mask[event]], 0.8, 30.0)

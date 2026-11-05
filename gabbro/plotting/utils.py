@@ -478,6 +478,30 @@ def get_label(name):
     return DEFAULT_LABELS[name]
 
 
+_ORBIT_OBJECT_LABELS = {
+    "L1T_PUPPIPart": "PUPPI particle",
+    "L1T_JetAK4": "AK4 jet",
+    "L1T_JetAK8": "AK8 jet",
+    "L1T_JetPuppiAK4": "PUPPI AK4 jet",
+    "L1T_JetPuppiAK8": "PUPPI AK8 jet",
+}
+
+
+def orbit_feature_label(name, kinematics=None):
+    """Label of a transformed ORBIT feature, following the run's kinematic transform.
+
+    ``kinematics`` is a :class:`gabbro.data.orbit_transforms.KinematicTransform`;
+    ``None`` keeps the historical ``eta / 3`` and ``log(pT) - 1.8`` labels.
+    """
+    if kinematics is not None:
+        for prefix, object_label in _ORBIT_OBJECT_LABELS.items():
+            if name == f"{prefix}_Eta":
+                return f"{object_label} ${kinematics.eta_latex}$"
+            if name == f"{prefix}_PT":
+                return f"{object_label} ${kinematics.log_pt_latex}$"
+    return DEFAULT_LABELS.get(name, name)
+
+
 def get_10_subplots(ratio=True, figsize=None, orientation="2x5"):
     """Create a 2x5 or 5x2 grid of axes for plotting with/without ratios. The axes are returned as
     an array of shape (2, 10), where the first row contains the main plot axes and the second row

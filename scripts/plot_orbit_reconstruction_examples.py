@@ -27,6 +27,7 @@ import torch
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 
+from gabbro.data.orbit_transforms import KinematicTransform
 from gabbro.data.orbit_parquet import OrbitParquetDataset, SEQUENCE_SCHEMAS
 from gabbro.plotting.orbit import plot_event_reconstruction_grid
 
@@ -103,22 +104,18 @@ def checkpoint_data_settings(cfg) -> dict:
         ),
         "include_energy": bool(cfg.data.get("include_energy", False)),
         "energy_shift": float(cfg.data.get("energy_shift", 2.5)),
+        "kinematics": KinematicTransform.from_data_config(cfg.data),
     }
 
 
-def to_physical(values: np.ndarray) -> np.ndarray:
-    """Convert [eta/3, cos(phi), sin(phi), log(pt)-1.8, ...] to eta, phi, pt."""
-    return np.stack(
-        [
-            values[..., 0] * 3.0,
-            np.arctan2(values[..., 2], values[..., 1]),
-            np.clip(np.exp(values[..., 3] + 1.8) - 1e-8, 0.0, None),
-        ],
-        axis=-1,
-    )
+def to_physical(values: np.ndarray, transform: KinematicTransform) -> np.ndarray:
+    """Undo the run's kinematic preprocessing: ``[..., >=4]`` -> ``[eta, phi, pT]``."""
+    return transform.to_physical(values)
 
 
-def decode_batch(model, batch: dict, device: torch.device) -> np.ndarray:
+def decode_batch(
+    model, batch: dict, device: torch.device, kinematics: KinematicTransform
+) -> np.ndarray:
     features = batch["part_features"].to(device)
     mask = batch["part_mask"].to(device)
     pid = batch.get("part_pid")
@@ -129,7 +126,7 @@ def decode_batch(model, batch: dict, device: torch.device) -> np.ndarray:
             reconstructed, _, _ = model._quantize_batch(features, mask, pid)
         else:
             reconstructed, _ = model.forward(features, mask, pid_particle=pid)
-    return to_physical(reconstructed.detach().cpu().numpy())
+    return to_physical(reconstructed.detach().cpu().numpy(), kinematics)
 
 
 def collect_sample(
@@ -155,14 +152,15 @@ def collect_sample(
         pid_cfg=cfg.get("pid"),
         include_energy=settings["include_energy"],
         energy_shift=settings["energy_shift"],
+        **settings["kinematics"].as_kwargs(),
     )
     originals = []
     reconstructed = []
     masks = []
     sources = []
     for batch in dataset:
-        batch_original = to_physical(batch["part_features"].numpy())
-        batch_reconstructed = decode_batch(model, batch, device)
+        batch_original = to_physical(batch["part_features"].numpy(), settings["kinematics"])
+        batch_reconstructed = decode_batch(model, batch, device, settings["kinematics"])
         batch_mask = batch["part_mask"].numpy().astype(bool)
         originals.append(batch_original)
         reconstructed.append(batch_reconstructed)

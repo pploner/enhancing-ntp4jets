@@ -25,6 +25,7 @@ from matplotlib.patches import Patch
 from omegaconf import OmegaConf
 from tqdm.auto import tqdm
 
+from gabbro.data.orbit_transforms import KinematicTransform
 from gabbro.plotting.orbit import (
     TRUTH_REFERENCE_COLOR,
     TRUTH_REFERENCE_FILL_ALPHA,
@@ -92,12 +93,14 @@ def evaluation_loader(run_dir: Path, suite: str, events: int, num_workers: int):
     return loaders[0]
 
 
-def to_physical(values: np.ndarray) -> dict[str, np.ndarray]:
-    return {
-        "eta": values[..., 0] * 3.0,
-        "phi": np.arctan2(values[..., 2], values[..., 1]),
-        "pt": np.clip(np.exp(values[..., 3] + 1.8) - 1e-8, 0.0, None),
-    }
+def run_kinematics(run_dir: Path) -> KinematicTransform:
+    cfg = OmegaConf.load(resolved_config_path(run_dir))
+    return KinematicTransform.from_data_config(cfg.data)
+
+
+def to_physical(values: np.ndarray, transform: KinematicTransform) -> dict[str, np.ndarray]:
+    physical = transform.to_physical(values)
+    return {"eta": physical[..., 0], "phi": physical[..., 1], "pt": physical[..., 2]}
 
 
 def histogram(values: np.ndarray, edges: np.ndarray) -> np.ndarray:
@@ -210,6 +213,16 @@ def main() -> None:
         models.append((label, model))
         checkpoints.append(str(checkpoint))
 
+    # Every model is fed the evaluation run's preprocessed features, so all of
+    # them must have been trained with the same kinematic transform.
+    kinematics = run_kinematics(args.evaluation_run_dir.resolve())
+    for run_dir, label in run_specs:
+        if run_kinematics(run_dir) != kinematics:
+            raise ValueError(
+                f"Run {label!r} uses {run_kinematics(run_dir)}, but the evaluation run uses "
+                f"{kinematics}; this script needs a shared preprocessing."
+            )
+
     original_chunks = []
     decoded_chunks = {label: [] for label, _ in models}
     processed_events = 0
@@ -234,12 +247,12 @@ def main() -> None:
             bar.update(batch_events)
 
     payload = {
-        "original": to_physical(np.concatenate(original_chunks)),
+        "original": to_physical(np.concatenate(original_chunks), kinematics),
         "decoded": [
             {
                 "label": label,
                 "style": label,
-                "values": to_physical(np.concatenate(decoded_chunks[label])),
+                "values": to_physical(np.concatenate(decoded_chunks[label]), kinematics),
             }
             for label, _ in models
         ],

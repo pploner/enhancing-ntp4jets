@@ -21,6 +21,7 @@ import numpy as np
 import torch
 from tqdm.auto import tqdm
 
+from gabbro.data.orbit_transforms import KinematicTransform
 from gabbro.data.orbit_parquet import OrbitParquetDataset
 from gabbro.plotting.orbit import collect_physical_reconstruction_histograms
 from scripts.evaluate_orbit_pid_pulls import (
@@ -58,6 +59,7 @@ def main() -> None:
     device = torch.device(args.device)
     model, cfg, checkpoint = load_model(args.run_dir.resolve(), device)
     sequence_type, max_length, mask_column, mask_min_value = checkpoint_data_settings(cfg)
+    kinematics = KinematicTransform.from_data_config(cfg.data)
     batch_size = args.batch_size or (16 if max_length > 128 else 256)
 
     original_chunks: list[np.ndarray] = []
@@ -84,6 +86,7 @@ def main() -> None:
                     pid_cfg=cfg.get("pid"),
                     include_energy=bool(cfg.data.get("include_energy", False)),
                     energy_shift=float(cfg.data.get("energy_shift", 2.5)),
+                    **KinematicTransform.from_data_config(cfg.data).as_kwargs(),
                 )
                 for batch in dataset:
                     features = batch["part_features"].to(device)
@@ -94,8 +97,8 @@ def main() -> None:
                     with torch.inference_mode():
                         reconstructed, _ = model(features, mask_tensor, pid_particle=pid)
                     mask = mask_tensor.cpu().numpy().astype(bool)
-                    original = to_physical(features.cpu().numpy())[mask]
-                    decoded = to_physical(reconstructed.cpu().numpy())[mask]
+                    original = to_physical(features.cpu().numpy(), kinematics)[mask]
+                    decoded = to_physical(reconstructed.cpu().numpy(), kinematics)[mask]
                     original_chunks.append(original.astype(np.float32, copy=False))
                     decoded_chunks.append(decoded.astype(np.float32, copy=False))
                     processed_particles += len(original)

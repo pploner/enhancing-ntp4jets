@@ -22,6 +22,7 @@ import numpy as np
 import torch
 from tqdm.auto import tqdm
 
+from gabbro.data.orbit_transforms import KinematicTransform
 from gabbro.callbacks.orbit_plotting_callback import match_jets_by_delta_r
 from gabbro.data.orbit_parquet import OrbitParquetDataset
 from scripts.evaluate_orbit_tau32 import (
@@ -95,6 +96,7 @@ def main() -> None:
     device = torch.device(args.device)
     model, cfg, checkpoint = load_model(args.run_dir.resolve(), device)
     sequence_type, max_length, mask_column, mask_min_value = checkpoint_data_settings(cfg)
+    kinematics = KinematicTransform.from_data_config(cfg.data)
     batch_size = args.batch_size or (16 if max_length > 128 else 256)
     class_quotas = split_quota(args.events, len(classes))
     storage = {f"{prefix}_delta_{feature}": [] for prefix in ("all", "leading5") for feature in ("pt", "eta", "phi")}
@@ -116,6 +118,7 @@ def main() -> None:
                     pid_cfg=cfg.get("pid"),
                     include_energy=bool(cfg.data.get("include_energy", False)),
                     energy_shift=float(cfg.data.get("energy_shift", 2.5)),
+                    **KinematicTransform.from_data_config(cfg.data).as_kwargs(),
                 )
                 for batch in dataset:
                     features = batch["part_features"].to(device)
@@ -125,8 +128,8 @@ def main() -> None:
                         pid = pid.to(device)
                     with torch.inference_mode():
                         reconstructed, _ = model(features, mask_tensor, pid_particle=pid)
-                    original = to_physical(features.cpu().numpy())
-                    decoded = to_physical(reconstructed.cpu().numpy())
+                    original = to_physical(features.cpu().numpy(), kinematics)
+                    decoded = to_physical(reconstructed.cpu().numpy(), kinematics)
                     mask = mask_tensor.cpu().numpy().astype(bool)
                     for event_index in range(len(mask)):
                         original_jets = reconstruct_jets(original[event_index, mask[event_index]], args.jet_radius, args.jet_min_pt)[:3]

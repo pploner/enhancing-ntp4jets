@@ -62,6 +62,7 @@ from scipy.optimize import curve_fit
 from scipy.optimize import linear_sum_assignment
 from tqdm.auto import tqdm
 
+from gabbro.data.orbit_transforms import KinematicTransform
 from gabbro.data.orbit_parquet import SEQUENCE_SCHEMAS, OrbitParquetDataset
 from gabbro.plotting.orbit import (
     HISTOGRAM_FILL_ALPHA,
@@ -228,7 +229,7 @@ def checkpoint_energy_settings(cfg) -> tuple[bool, float]:
     )
 
 
-def decode_batch(model, batch, device):
+def decode_batch(model, batch, device, kinematics: KinematicTransform):
     features = batch["part_features"].to(device)
     mask = batch["part_mask"].to(device)
     pid = batch.get("part_pid")
@@ -239,15 +240,7 @@ def decode_batch(model, batch, device):
             reconstructed, _, _ = model._quantize_batch(features, mask, pid)
         else:
             reconstructed, _ = model.forward(features, mask, pid_particle=pid)
-    values = reconstructed.detach().cpu().numpy()
-    return np.stack(
-        [
-            values[..., 0] * 3.0,
-            np.arctan2(values[..., 2], values[..., 1]),
-            np.clip(np.exp(values[..., 3] + 1.8) - 1e-8, 0.0, None),
-        ],
-        axis=-1,
-    )
+    return kinematics.to_physical(reconstructed.detach().cpu().numpy())
 
 
 def prepare_test_time_baseline(model, cfg, output_dir: Path):
@@ -871,6 +864,7 @@ def evaluate_run(args, run_dir: Path, output_dir: Path):
         checkpoint_data_settings(cfg)
     )
     include_energy, energy_shift = checkpoint_energy_settings(cfg)
+    kinematics = KinematicTransform.from_data_config(cfg.data)
     batch_size = args.batch_size or (16 if max_sequence_length > 128 else 256)
     prepare_test_time_baseline(model, cfg, output_dir)
     dataset = OrbitParquetDataset(
@@ -885,12 +879,13 @@ def evaluate_run(args, run_dir: Path, output_dir: Path):
         pid_cfg=cfg.get("pid"),
         include_energy=include_energy,
         energy_shift=energy_shift,
+        **kinematics.as_kwargs(),
     )
     truth_reader = TruthReader() if args.candidate_mode == "truth" else None
     rows = []
     with tqdm(total=args.events, desc="Evaluating ggHbb", unit="event") as progress:
         for batch in dataset:
-            decoded = decode_batch(model, batch, device)
+            decoded = decode_batch(model, batch, device, kinematics)
             mask = batch["part_mask"].numpy().astype(bool)
             for index in range(mask.shape[0]):
                 source_file = str(batch["source_files"][index])
