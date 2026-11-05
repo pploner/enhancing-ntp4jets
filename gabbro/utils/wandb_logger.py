@@ -47,6 +47,11 @@ class BestAndLatestWandbLogger(WandbLogger):
             return
         self._checkpoint_callbacks[id(checkpoint_callback)] = checkpoint_callback
         if self._log_model == "all":
+            # A save_last callback writes its per-epoch file first and last.ckpt
+            # right after. Before the first last.ckpt exists, that per-epoch file
+            # would be uploaded as "latest" and then again as last.ckpt; wait.
+            if checkpoint_callback.save_last and not checkpoint_callback.last_model_path:
+                return
             self._log_best_and_latest()
 
     @rank_zero_only
