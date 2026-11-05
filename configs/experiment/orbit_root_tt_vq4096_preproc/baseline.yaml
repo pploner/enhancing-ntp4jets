@@ -1,0 +1,25 @@
+# @package _global_
+
+# TT ROOT VQ-4096 preprocessing scan, run 0: baseline.
+# Historical preprocessing (eta/3, log pT - 1.8). Eta carries ~11% of the MSE variance.
+#
+# Everything except the preprocessing, seed and names comes from
+# orbit_root_tt_vq4096 (the shared recipe; edit that file, not these).
+# Compare runs only in physical units (eta/phi/pT residuals, jet matching, MET):
+# val_loss / loss_reco / transformed_mse_* are in each run's own transformed units.
+defaults:
+  - /experiment/orbit_root_tt_vq4096
+  - _self_
+
+project_name: orbit-root-tt-vq4096-preproc
+task_name: tt-vq4096-preproc-baseline
+tags: [orbit, root, phase2-l1, tt, particle, puppiw-0p05, vq-ste, codes-4096, alpha-10, lr-1e-4, constant-lr, preproc-scan, preproc-baseline, eta-scale-3, pt-shift-1.8]
+seed: 12345
+
+data:
+  eta_scale: 3.0
+  pt_shift: 1.8
+
+logger:
+  wandb:
+    group: tt-vq4096-preproc-scan
