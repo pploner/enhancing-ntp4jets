@@ -1,0 +1,40 @@
+# @package _global_
+
+# TT ROOT VQ-4096 preprocessing scan, run C: fitted.
+# Fitted standardisation: eta_scale = std(eta), pt_shift = mean(log pT) on the TT ROOT
+# train split (scripts/fit_orbit_kinematic_stats.py,
+# outputs/kinematic_stats/orbit_root_tt_vq4096.json). Eta carries ~37% of the MSE variance.
+#
+# Everything except the preprocessing, seed and names comes from
+# orbit_root_tt_vq4096 (the shared recipe; edit that file, not these).
+# Compare runs only in physical units (eta/phi/pT residuals, jet matching, MET):
+# val_loss / loss_reco / transformed_mse_* are in each run's own transformed units.
+defaults:
+  - /experiment/orbit_root_tt_vq4096
+  - _self_
+
+project_name: orbit-root-tt-vq4096-preproc-small
+task_name: tt-vq4096-preproc-fitted-small
+tags: [orbit, root, phase2-l1, tt, particle, puppiw-0p05, vq-ste, codes-4096, alpha-10, lr-1e-4, constant-lr, preproc-scan, preproc-fitted, eta-scale-1.35764, pt-shift-1.41455, n-blocks-2]
+seed: 12345
+
+data:
+  eta_scale: 1.35764
+  pt_shift: 1.41455
+
+# Run to convergence (early stopping on val_loss, patience 4), as in the
+# 512/4096/8192 codebook-size comparison. Every epoch is kept locally, so a
+# fixed-budget comparison (e.g. epoch_029.ckpt) stays possible afterwards.
+trainer:
+  max_epochs: 150
+
+logger:
+  wandb:
+    # Upload only best + latest once at the end of training (also on Ctrl+C or
+    # a crash, not on a hard kill / pod deletion); all epochs stay on disk.
+    log_model: true
+
+model:
+  model_kwargs:
+    num_blocks: 2
+
